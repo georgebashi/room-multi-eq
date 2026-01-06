@@ -52,7 +52,7 @@ private:
     // Display range
     static constexpr float minFreq = 20.0f;
     static constexpr float maxFreq = 20000.0f;
-    static constexpr float minDB = -24.0f;
+    static constexpr float minDB = -60.0f;
     static constexpr float maxDB = 12.0f;
 
     // Smoothing factor (0 = no smoothing, 1 = infinite smoothing)

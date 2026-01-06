@@ -48,12 +48,15 @@ std::vector<float> SpectrumDataCollector::computeSpectrum(const std::array<float
     fft.performFrequencyOnlyForwardTransform(fftData.data());
 
     // Convert to dB
+    // performFrequencyOnlyForwardTransform returns magnitudes scaled by fftSize/2
+    // We want 0dB to represent a full-scale sine wave, which has magnitude fftSize/2 at its bin
     std::vector<float> spectrum(fftSize / 2);
+    const float referenceLevel = static_cast<float>(fftSize) / 2.0f;
     for (int i = 0; i < fftSize / 2; ++i)
     {
         float magnitude = fftData[i];
-        // Normalize and convert to dB, with floor at -100dB
-        float db = magnitude > 0.0f ? 20.0f * std::log10(magnitude / static_cast<float>(fftSize)) : -100.0f;
+        // Convert to dB relative to full-scale, with floor at -100dB
+        float db = magnitude > 0.0f ? 20.0f * std::log10(magnitude / referenceLevel) : -100.0f;
         spectrum[i] = db;
     }
 

@@ -8,8 +8,9 @@ SpectrumAnalyzer::SpectrumAnalyzer(SpectrumDataCollector& c,
                                    double& sr)
     : collector(c), channel(ch), sampleRate(sr)
 {
-    smoothedInput.resize(SpectrumDataCollector::fftSize / 2, minDB);
-    smoothedOutput.resize(SpectrumDataCollector::fftSize / 2, minDB);
+    // Initialize to -100dB (silence) - actual values will smooth in when audio plays
+    smoothedInput.resize(SpectrumDataCollector::fftSize / 2, -100.0f);
+    smoothedOutput.resize(SpectrumDataCollector::fftSize / 2, -100.0f);
 }
 
 SpectrumAnalyzer::~SpectrumAnalyzer()
@@ -78,7 +79,7 @@ void SpectrumAnalyzer::drawGrid(juce::Graphics& g)
     }
 
     // Horizontal lines at dB intervals
-    const float dbs[] = {-24.0f, -18.0f, -12.0f, -6.0f, 0.0f, 6.0f, 12.0f};
+    const float dbs[] = {-60.0f, -48.0f, -36.0f, -24.0f, -12.0f, 0.0f, 12.0f};
     for (float db : dbs)
     {
         float y = bounds.getY() + dbToY(db) * bounds.getHeight();
@@ -98,8 +99,8 @@ void SpectrumAnalyzer::drawGrid(juce::Graphics& g)
     }
 
     // dB labels
-    const char* dbLabels[] = {"-24", "-12", "0", "+12"};
-    const float dbValues[] = {-24.0f, -12.0f, 0.0f, 12.0f};
+    const char* dbLabels[] = {"-60", "-36", "-12", "+12"};
+    const float dbValues[] = {-60.0f, -36.0f, -12.0f, 12.0f};
     for (int i = 0; i < 4; ++i)
     {
         float y = bounds.getY() + dbToY(dbValues[i]) * bounds.getHeight();
