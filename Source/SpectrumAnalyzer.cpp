@@ -230,9 +230,13 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
     struct Point {
         float x, yMin, yMax;
         bool isBoost;  // true = output > input (white), false = output < input (purple)
-        bool hasData;  // false = gap in data (both below floor)
     };
     std::vector<Point> points;
+
+    // Track if we've seen any data above the floor
+    bool seenData = false;
+    size_t firstDataIdx = 0;
+    size_t lastDataIdx = 0;
 
     for (size_t i = 1; i < smoothedInput.size() && i < smoothedOutput.size(); ++i)
     {
@@ -242,11 +246,20 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
 
         float x = bounds.getX() + frequencyToX(freq) * bounds.getWidth();
 
-        // Check if both input and output are at or below the floor (no data to display)
-        bool hasData = !(smoothedInput[i] <= minDB && smoothedOutput[i] <= minDB);
-
         float inputDB = std::clamp(smoothedInput[i], minDB, maxDB);
         float outputDB = std::clamp(smoothedOutput[i], minDB, maxDB);
+
+        // Track data range (where we have signal above the floor)
+        bool hasSignal = (smoothedInput[i] > minDB || smoothedOutput[i] > minDB);
+        if (hasSignal)
+        {
+            if (!seenData)
+            {
+                seenData = true;
+                firstDataIdx = points.size();
+            }
+            lastDataIdx = points.size();
+        }
 
         float yInput = bounds.getY() + dbToY(inputDB) * bounds.getHeight();
         float yOutput = bounds.getY() + dbToY(outputDB) * bounds.getHeight();
@@ -255,8 +268,8 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
         float yMin = std::min(yInput, yOutput);
         float yMax = std::max(yInput, yOutput);
 
-        // Ensure minimum thickness when there's data
-        if (hasData && yMax - yMin < minLineThickness)
+        // Ensure minimum thickness
+        if (yMax - yMin < minLineThickness)
         {
             float center = (yMin + yMax) / 2.0f;
             yMin = center - minLineThickness / 2.0f;
@@ -267,39 +280,42 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
         // This prevents flickering when input and output are nearly equal
         bool isBoost = (outputDB - inputDB) > boostThresholdDB;
 
-        points.push_back({x, yMin, yMax, isBoost, hasData});
+        points.push_back({x, yMin, yMax, isBoost});
     }
+
+    // Only draw if we have some data above the floor
+    if (!seenData || points.empty())
+        return;
+
+    // Trim to only the range where we have data (avoid drawing flat lines at edges)
+    if (lastDataIdx + 1 < points.size())
+        points.resize(lastDataIdx + 1);
+    if (firstDataIdx > 0)
+        points.erase(points.begin(), points.begin() + firstDataIdx);
 
     if (points.empty())
         return;
 
-    // Draw filled regions, handling gaps in data
+    // Draw filled regions by color
     // At color transitions, include the boundary point in the current region
     // to avoid gaps between adjacent regions
     size_t i = 0;
     while (i < points.size())
     {
-        // Skip gaps (no data)
-        while (i < points.size() && !points[i].hasData)
-            ++i;
-
-        if (i >= points.size())
-            break;
-
         bool currentBoost = points[i].isBoost;
         size_t start = i;
 
-        // Find end of contiguous same-color region (stop at gaps or color change)
-        while (i < points.size() && points[i].hasData && points[i].isBoost == currentBoost)
+        // Find end of contiguous same-color region
+        while (i < points.size() && points[i].isBoost == currentBoost)
             ++i;
 
         if (i == start)
             continue;
 
         // Determine the end index for drawing - include next point if it's a color transition
-        // (not a gap), so adjacent regions share their boundary
+        // so adjacent regions share their boundary
         size_t drawEnd = i;
-        if (i < points.size() && points[i].hasData)
+        if (i < points.size())
             drawEnd = i + 1;  // Include the transition point
 
         // Build path for this region
