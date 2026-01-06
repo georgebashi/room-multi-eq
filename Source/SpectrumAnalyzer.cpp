@@ -223,7 +223,7 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
     bounds.removeFromLeft(25.0f);
 
     const float binWidth = static_cast<float>(sr) / static_cast<float>(SpectrumDataCollector::fftSize);
-    const float minLineThickness = 2.0f;  // Minimum 2px line thickness
+    const float minLineThickness = 1.0f;  // Minimum 1px line thickness
 
     // We'll draw segments, each colored based on boost vs cut
     struct Point {
@@ -236,6 +236,10 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
     {
         float freq = static_cast<float>(i) * binWidth;
         if (freq < minFreq || freq > maxFreq)
+            continue;
+
+        // Skip if both input and output are at or below the floor (no data to display)
+        if (smoothedInput[i] <= minDB && smoothedOutput[i] <= minDB)
             continue;
 
         float x = bounds.getX() + frequencyToX(freq) * bounds.getWidth();
@@ -292,8 +296,12 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
 
         path.closeSubPath();
 
-        g.setColour(juce::Colour(currentBoost ? colBoost : colCut));
+        auto colour = juce::Colour(currentBoost ? colBoost : colCut);
+        g.setColour(colour);
         g.fillPath(path);
+
+        // Stroke the path to ensure visibility when shape is thin horizontally
+        g.strokePath(path, juce::PathStrokeType(1.0f));
     }
 }
 
