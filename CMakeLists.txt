@@ -129,26 +129,30 @@ set_source_files_properties(
     PROPERTIES COMPILE_FLAGS "${WERROR_FLAG}"
 )
 
-# Screenshot capture executable (optional target for documentation)
-add_executable(RoomMultiEQ_Screenshot
-    Source/Screenshot.cpp
-    Source/PluginProcessor.cpp
-    Source/PluginEditor.cpp
-    Source/EQBand.cpp
-    Source/ChannelEQ.cpp
-    Source/FilterFileParser.cpp
-)
+# Screenshot capture executable (optional, for documentation only)
+option(ROOMMULTIEQ_BUILD_SCREENSHOT "Build screenshot capture tool" OFF)
 
-target_link_libraries(RoomMultiEQ_Screenshot
-    PRIVATE
-        juce::juce_audio_utils
-        juce::juce_dsp
-)
+if(ROOMMULTIEQ_BUILD_SCREENSHOT)
+    add_executable(RoomMultiEQ_Screenshot
+        Source/Screenshot.cpp
+        Source/PluginProcessor.cpp
+        Source/PluginEditor.cpp
+        Source/EQBand.cpp
+        Source/ChannelEQ.cpp
+        Source/FilterFileParser.cpp
+    )
 
-target_compile_definitions(RoomMultiEQ_Screenshot
-    PRIVATE
-        JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
-        JUCE_WEB_BROWSER=0
-        JUCE_USE_CURL=0
-        JucePlugin_Name="Room Multi EQ"
-)
+    target_link_libraries(RoomMultiEQ_Screenshot
+        PRIVATE
+            juce::juce_audio_utils
+            juce::juce_dsp
+    )
+
+    target_compile_definitions(RoomMultiEQ_Screenshot
+        PRIVATE
+            JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
+            JUCE_WEB_BROWSER=0
+            JUCE_USE_CURL=0
+            JucePlugin_Name="Room Multi EQ"
+    )
+endif()

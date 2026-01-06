@@ -22,6 +22,11 @@ cmake --build build -j --target RoomMultiEQ_Tests
 # Validate AudioUnit
 auval -a    # List all AudioUnits
 auval -v aufx Rmeq Gbsh   # Validate this plugin
+
+# Build screenshot tool (for documentation, not built by default)
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DROOMMULTIEQ_BUILD_SCREENSHOT=ON
+cmake --build build -j --target RoomMultiEQ_Screenshot
+./build/RoomMultiEQ_Screenshot
 ```
 
 The plugin is automatically copied to `~/Library/Audio/Plug-Ins/Components/` after build (COPY_PLUGIN_AFTER_BUILD is enabled).
