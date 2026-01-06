@@ -1,6 +1,7 @@
 #include "FilterFileParser.h"
 #include "EQBand.h"
 #include "ChannelEQ.h"
+#include "FilterResponseCalculator.h"
 #include <juce_core/juce_core.h>
 #include <juce_dsp/juce_dsp.h>
 #include <cmath>
@@ -313,6 +314,60 @@ TEST(channeleq_processes_all_bands)
 }
 
 //==============================================================================
+// FilterResponseCalculator Tests
+//==============================================================================
+
+TEST(filter_response_flat_when_bypassed)
+{
+    ChannelEQ eq;
+    juce::dsp::ProcessSpec spec;
+    spec.sampleRate = 44100.0;
+    spec.maximumBlockSize = 512;
+    spec.numChannels = 1;
+    eq.prepare(spec);
+
+    // All bands bypassed by default
+    auto response = FilterResponseCalculator::calculateResponse(eq, 44100.0, 100);
+
+    // Response should be 0dB everywhere
+    for (float db : response)
+    {
+        ASSERT_NEAR(db, 0.0f, 0.01f);
+    }
+}
+
+TEST(filter_response_peak_at_center)
+{
+    ChannelEQ eq;
+    juce::dsp::ProcessSpec spec;
+    spec.sampleRate = 44100.0;
+    spec.maximumBlockSize = 512;
+    spec.numChannels = 1;
+    eq.prepare(spec);
+
+    eq.getBand(0).setFrequency(1000.0f);
+    eq.getBand(0).setGain(6.0f);
+    eq.getBand(0).setQ(2.0f);
+    eq.getBand(0).setType(FilterType::Peak);
+    eq.getBand(0).setBypassed(false);
+
+    auto response = FilterResponseCalculator::calculateResponse(eq, 44100.0, 200);
+
+    // Find the point closest to 1kHz (log scale)
+    // 1kHz is at t = (log10(1000) - log10(20)) / (log10(20000) - log10(20))
+    // = (3 - 1.301) / (4.301 - 1.301) = 1.699 / 3 = 0.566
+    int idx1k = static_cast<int>(0.566f * 199);
+
+    // Response at 1kHz should be close to +6dB
+    ASSERT(response[idx1k] > 5.0f);
+    ASSERT(response[idx1k] < 7.0f);
+
+    // Response far from center should be near 0dB
+    ASSERT(std::abs(response[0]) < 1.0f);   // 20Hz
+    ASSERT(std::abs(response[199]) < 1.0f); // 20kHz
+}
+
+//==============================================================================
 // Main
 //==============================================================================
 
@@ -335,6 +390,10 @@ int main()
 
     // ChannelEQ tests
     RUN_TEST(channeleq_processes_all_bands);
+
+    // FilterResponseCalculator tests
+    RUN_TEST(filter_response_flat_when_bypassed);
+    RUN_TEST(filter_response_peak_at_center);
 
     std::cout << "\n=== Results ===\n";
     std::cout << "Passed: " << testsPassed << "\n";

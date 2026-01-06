@@ -105,6 +105,7 @@ add_executable(RoomMultiEQ_Tests
     Source/FilterFileParser.cpp
     Source/EQBand.cpp
     Source/ChannelEQ.cpp
+    Source/FilterResponseCalculator.cpp
 )
 
 target_link_libraries(RoomMultiEQ_Tests
