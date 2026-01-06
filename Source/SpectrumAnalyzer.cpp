@@ -66,12 +66,50 @@ void SpectrumAnalyzer::paint(juce::Graphics& g)
 {
     drawBackground(g);
     drawGrid(g);
-    drawDifferenceSpectrum(g);
+
+    // Draw accumulated spectrum with motion blur
+    updateAccumulationBuffer();
+    if (accumulationBuffer.isValid())
+        g.drawImageAt(accumulationBuffer, 0, 0);
+
     drawFilterCurve(g);
 }
 
 void SpectrumAnalyzer::resized()
 {
+    // Invalidate buffer on resize
+    accumulationBuffer = juce::Image();
+}
+
+void SpectrumAnalyzer::updateAccumulationBuffer()
+{
+    auto bounds = getLocalBounds();
+    if (bounds.isEmpty())
+        return;
+
+    // Create or resize buffer if needed
+    if (!accumulationBuffer.isValid() ||
+        accumulationBuffer.getWidth() != bounds.getWidth() ||
+        accumulationBuffer.getHeight() != bounds.getHeight())
+    {
+        accumulationBuffer = juce::Image(juce::Image::ARGB, bounds.getWidth(), bounds.getHeight(), true);
+    }
+
+    // Fade the existing buffer
+    {
+        juce::Graphics bufferG(accumulationBuffer);
+
+        // Multiply existing pixels by fade factor using a semi-transparent overlay
+        // Drawing the background color at (1 - trailFade) opacity fades old content
+        bufferG.setColour(juce::Colour(colBackground).withAlpha(1.0f - trailFade));
+        bufferG.fillAll();
+    }
+
+    // Draw new spectrum frame onto buffer
+    {
+        juce::Graphics bufferG(accumulationBuffer);
+        drawDifferenceSpectrum(bufferG);
+    }
 }
 
 void SpectrumAnalyzer::drawBackground(juce::Graphics& g)

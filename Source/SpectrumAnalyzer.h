@@ -2,6 +2,7 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <juce_graphics/juce_graphics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "SpectrumDataCollector.h"
 #include "ChannelEQ.h"
@@ -44,6 +45,10 @@ private:
     std::vector<float> smoothedInput;
     std::vector<float> smoothedOutput;
 
+    // Frame accumulation buffer for motion blur effect
+    juce::Image accumulationBuffer;
+    void updateAccumulationBuffer();
+
     // Dracula theme colors
     static constexpr juce::uint32 colBackground = 0xff282a36;
     static constexpr juce::uint32 colGridLine = 0xff44475a;
@@ -63,6 +68,9 @@ private:
 
     // Smoothing factor (0 = no smoothing, 1 = infinite smoothing)
     static constexpr float smoothingFactor = 0.7f;
+
+    // Frame accumulation fade (0 = no trail, 1 = infinite trail)
+    static constexpr float trailFade = 0.85f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SpectrumAnalyzer)
 };
