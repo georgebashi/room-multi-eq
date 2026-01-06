@@ -1,4 +1,5 @@
 #include "EQBand.h"
+#include <cmath>
 
 EQBand::EQBand()
 {
@@ -19,7 +20,7 @@ void EQBand::reset()
 void EQBand::setFrequency(float freq)
 {
     freq = juce::jlimit(20.0f, 20000.0f, freq);
-    if (params.frequency != freq)
+    if (std::abs(params.frequency - freq) > 1e-6f)
     {
         params.frequency = freq;
         needsUpdate = true;
@@ -29,7 +30,7 @@ void EQBand::setFrequency(float freq)
 void EQBand::setGain(float gainDB)
 {
     gainDB = juce::jlimit(-20.0f, 20.0f, gainDB);
-    if (params.gainDB != gainDB)
+    if (std::abs(params.gainDB - gainDB) > 1e-6f)
     {
         params.gainDB = gainDB;
         needsUpdate = true;
@@ -39,7 +40,7 @@ void EQBand::setGain(float gainDB)
 void EQBand::setQ(float q)
 {
     q = juce::jlimit(0.1f, 30.0f, q);
-    if (params.q != q)
+    if (std::abs(params.q - q) > 1e-6f)
     {
         params.q = q;
         needsUpdate = true;

@@ -248,10 +248,6 @@ bool ChannelEQComponent::isBandActive(int bandIndex) const
     if (!freqParam || !gainParam || !qParam)
         return true;  // Show if we can't check
 
-    float actualFreq = freqParam->getValue() * (20000.0f - 20.0f) + 20.0f;  // Manual denormalize for freq
-    float actualGain = gainParam->getValue() * 40.0f - 20.0f;  // -20 to +20
-    float actualQ = qParam->getValue() * (30.0f - 0.1f) + 0.1f;  // 0.1 to 30
-
     // Note: These are approximations - the actual ranges use skew factors
     // For freq and Q, just check if normalized value is near default normalized value
     float freqNormDefault = freqParam->convertTo0to1(freqDefault);
