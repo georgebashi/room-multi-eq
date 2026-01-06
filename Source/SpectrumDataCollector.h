@@ -17,12 +17,13 @@ public:
     void pushInputSample(float sample);
     void pushOutputSample(float sample);
 
-    // Returns spectrum in dB, size = fftSize/2
-    std::vector<float> getInputSpectrum();
-    std::vector<float> getOutputSpectrum();
+    // Returns spectrum in dB with psychoacoustic smoothing, size = fftSize/2
+    std::vector<float> getInputSpectrum(double sampleRate);
+    std::vector<float> getOutputSpectrum(double sampleRate);
 
 private:
     std::vector<float> computeSpectrum(const std::array<float, fftSize>& ringBuffer);
+    void applyPsychoacousticSmoothing(std::vector<float>& spectrum, double sampleRate);
 
     juce::dsp::FFT fft;
     juce::dsp::WindowingFunction<float> window;
