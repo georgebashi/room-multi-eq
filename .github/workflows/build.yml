@@ -1,0 +1,179 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libfreetype6-dev libx11-dev \
+            libxrandr-dev libxcursor-dev libxinerama-dev libgl1-mesa-dev
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build tests
+        run: cmake --build build --target RoomMultiEQ_Tests
+
+      - name: Run tests
+        run: ./build/RoomMultiEQ_Tests
+
+  build-macos:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate version
+        id: version
+        run: |
+          VERSION=$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Configure
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DROOMMULTIEQ_VERSION=${{ steps.version.outputs.version }}
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        run: |
+          cd ~/Library/Audio/Plug-Ins/Components
+          zip -r "$GITHUB_WORKSPACE/RoomMultiEQ-macOS.zip" "Room Multi EQ.component"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RoomMultiEQ-macOS
+          path: RoomMultiEQ-macOS.zip
+
+  build-windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Configure
+        run: |
+          cmake -B build -DROOMMULTIEQ_VERSION=${{ steps.version.outputs.version }}
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        shell: bash
+        run: |
+          cd build/RoomMultiEQ_artefacts/Release/VST3
+          7z a "$GITHUB_WORKSPACE/RoomMultiEQ-Windows.zip" "Room Multi EQ.vst3"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RoomMultiEQ-Windows
+          path: RoomMultiEQ-Windows.zip
+
+  build-linux:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libfreetype6-dev libx11-dev \
+            libxrandr-dev libxcursor-dev libxinerama-dev libgl1-mesa-dev
+
+      - name: Generate version
+        id: version
+        run: |
+          VERSION=$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Configure
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DROOMMULTIEQ_VERSION=${{ steps.version.outputs.version }}
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Package
+        run: |
+          cd build/RoomMultiEQ_artefacts/LV2
+          zip -r "$GITHUB_WORKSPACE/RoomMultiEQ-Linux.zip" "Room Multi EQ.lv2"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RoomMultiEQ-Linux
+          path: RoomMultiEQ-Linux.zip
+
+  release:
+    needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate version
+        id: version
+        run: |
+          VERSION=$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Delete existing latest release
+        run: gh release delete latest --yes || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete existing latest tag
+        run: git push origin :refs/tags/latest || true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest Build (${{ steps.version.outputs.version }})
+          prerelease: true
+          body: |
+            ## Latest Build
+
+            **Version:** ${{ steps.version.outputs.version }}
+            **Commit:** ${{ github.sha }}
+
+            ### Downloads
+            - **macOS** (AU) - Universal binary (arm64 + x86_64), unsigned
+            - **Windows** (VST3)
+            - **Linux** (LV2)
+
+            > **macOS users:** Right-click the .component file → Open to bypass Gatekeeper, or see [Apple's instructions](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unidentified-developer-mh40616/mac).
+          files: |
+            artifacts/RoomMultiEQ-macOS/RoomMultiEQ-macOS.zip
+            artifacts/RoomMultiEQ-Windows/RoomMultiEQ-Windows.zip
+            artifacts/RoomMultiEQ-Linux/RoomMultiEQ-Linux.zip
