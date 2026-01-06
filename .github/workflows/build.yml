@@ -191,7 +191,7 @@ jobs:
         with:
           tag_name: latest
           name: Latest Build (${{ steps.version.outputs.display_version }})
-          prerelease: true
+          prerelease: false
           body: |
             ## Latest Build
 
