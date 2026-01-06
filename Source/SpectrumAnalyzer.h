@@ -32,6 +32,7 @@ private:
     void drawGrid(juce::Graphics& g);
     void drawSpectrum(juce::Graphics& g, const std::vector<float>& spectrum, juce::Colour colour, bool filled);
     void drawFilterCurve(juce::Graphics& g);
+    void drawDifferenceSpectrum(juce::Graphics& g);
 
     float frequencyToX(float freq) const;
     float dbToY(float db) const;

@@ -215,6 +215,91 @@ void SpectrumAnalyzer::drawFilterCurve(juce::Graphics& g)
     g.strokePath(path, juce::PathStrokeType(2.0f));
 }
 
+void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
+{
+    double sr = processorRef.getCurrentSampleRate();
+    if (smoothedInput.empty() || smoothedOutput.empty() || sr <= 0.0)
+        return;
+
+    auto bounds = getLocalBounds().toFloat().reduced(30.0f, 20.0f);
+    bounds.removeFromBottom(20.0f);
+    bounds.removeFromLeft(25.0f);
+
+    const float binWidth = static_cast<float>(sr) / static_cast<float>(SpectrumDataCollector::fftSize);
+    const float minLineThickness = 2.0f;  // Minimum 2px line thickness
+
+    // We'll draw segments, each colored based on boost vs cut
+    struct Point {
+        float x, yMin, yMax;
+        bool isBoost;  // true = output > input (white), false = output < input (purple)
+    };
+    std::vector<Point> points;
+
+    for (size_t i = 1; i < smoothedInput.size() && i < smoothedOutput.size(); ++i)
+    {
+        float freq = static_cast<float>(i) * binWidth;
+        if (freq < minFreq || freq > maxFreq)
+            continue;
+
+        float x = bounds.getX() + frequencyToX(freq) * bounds.getWidth();
+
+        float inputDB = std::clamp(smoothedInput[i], minDB, maxDB);
+        float outputDB = std::clamp(smoothedOutput[i], minDB, maxDB);
+
+        float yInput = bounds.getY() + dbToY(inputDB) * bounds.getHeight();
+        float yOutput = bounds.getY() + dbToY(outputDB) * bounds.getHeight();
+
+        // Determine min/max y (remember: lower y = higher dB on screen)
+        float yMin = std::min(yInput, yOutput);
+        float yMax = std::max(yInput, yOutput);
+
+        // Ensure minimum thickness
+        if (yMax - yMin < minLineThickness)
+        {
+            float center = (yMin + yMax) / 2.0f;
+            yMin = center - minLineThickness / 2.0f;
+            yMax = center + minLineThickness / 2.0f;
+        }
+
+        // isBoost: output > input means outputDB > inputDB means yOutput < yInput (inverted y)
+        bool isBoost = outputDB > inputDB;
+
+        points.push_back({x, yMin, yMax, isBoost});
+    }
+
+    if (points.empty())
+        return;
+
+    // Draw filled regions by finding contiguous sections of same color
+    size_t i = 0;
+    while (i < points.size())
+    {
+        bool currentBoost = points[i].isBoost;
+        size_t start = i;
+
+        // Find end of contiguous same-color region
+        while (i < points.size() && points[i].isBoost == currentBoost)
+            ++i;
+
+        // Build path for this region
+        juce::Path path;
+
+        // Top edge (left to right)
+        path.startNewSubPath(points[start].x, points[start].yMin);
+        for (size_t j = start + 1; j < i; ++j)
+            path.lineTo(points[j].x, points[j].yMin);
+
+        // Bottom edge (right to left)
+        for (size_t j = i; j > start; --j)
+            path.lineTo(points[j - 1].x, points[j - 1].yMax);
+
+        path.closeSubPath();
+
+        g.setColour(juce::Colour(currentBoost ? colBoost : colCut));
+        g.fillPath(path);
+    }
+}
+
 float SpectrumAnalyzer::frequencyToX(float freq) const
 {
     // Logarithmic mapping
