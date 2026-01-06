@@ -51,6 +51,8 @@ private:
     static constexpr juce::uint32 colFilterCurve = 0xffffb86c;
     static constexpr juce::uint32 colText = 0xfff8f8f2;
     static constexpr juce::uint32 colTitle = 0xffbd93f9;
+    static constexpr juce::uint32 colBoost = 0xfff8f8f2;    // White (Dracula foreground) - output > input
+    static constexpr juce::uint32 colCut = 0xffbd93f9;      // Purple (Dracula purple) - output < input
 
     // Display range
     static constexpr float minFreq = 20.0f;
