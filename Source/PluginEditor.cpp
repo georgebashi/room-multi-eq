@@ -119,10 +119,19 @@ private:
 // ChannelEQComponent
 //==============================================================================
 
-ChannelEQComponent::ChannelEQComponent(RoomMultiEQAudioProcessor& p, bool isLeft)
-    : processor(p), isLeftChannel(isLeft)
+ChannelEQComponent::ChannelEQComponent(RoomMultiEQAudioProcessor& p, bool isLeft, SpectrumDataCollector& collector, double& sr)
+    : processor(p), isLeftChannel(isLeft), sampleRateRef(sr)
 {
     channelPrefix = isLeft ? "left" : "right";
+
+    // Create spectrum analyzer
+    spectrumAnalyzer = std::make_unique<SpectrumAnalyzer>(
+        collector,
+        isLeft ? p.getLeftChannel() : p.getRightChannel(),
+        sampleRateRef
+    );
+    addAndMakeVisible(*spectrumAnalyzer);
+    spectrumAnalyzer->startAnalysis();
 
     importButton.setButtonText("Import");
     importButton.onClick = [this]() { importFilterFile(); };
@@ -167,15 +176,41 @@ void ChannelEQComponent::resized()
 {
     auto bounds = getLocalBounds().reduced(5);
 
-    auto topArea = bounds.removeFromTop(30);
-    topArea.removeFromTop(5);
-
-    auto buttonArea = bounds.removeFromTop(30);
-    importButton.setBounds(buttonArea.removeFromLeft(100).reduced(2));
-    clearButton.setBounds(buttonArea.removeFromLeft(80).reduced(2));
-
+    // Title area
+    bounds.removeFromTop(30);
     bounds.removeFromTop(5);
-    table.setBounds(bounds);
+
+    // Buttons at bottom
+    auto buttonArea = bounds.removeFromBottom(30);
+    importButton.setBounds(buttonArea.removeFromLeft(buttonArea.getWidth() / 2).reduced(2));
+    clearButton.setBounds(buttonArea.reduced(2));
+
+    bounds.removeFromBottom(5);
+
+    // Check if table should be visible
+    auto* editor = findParentComponentOfClass<RoomMultiEQAudioProcessorEditor>();
+    bool showTable = editor != nullptr && editor->areTablesVisible();
+
+    if (showTable)
+    {
+        // Split: 40% spectrum, 60% table
+        int spectrumHeight = static_cast<int>(bounds.getHeight() * 0.4f);
+        spectrumAnalyzer->setBounds(bounds.removeFromTop(spectrumHeight));
+        bounds.removeFromTop(5);
+        table.setBounds(bounds);
+        table.setVisible(true);
+    }
+    else
+    {
+        // Full spectrum
+        spectrumAnalyzer->setBounds(bounds);
+        table.setVisible(false);
+    }
+}
+
+void ChannelEQComponent::updateLayout()
+{
+    resized();
 }
 
 int ChannelEQComponent::getNumRows()
@@ -325,9 +360,22 @@ void ChannelEQComponent::clearAll()
 RoomMultiEQAudioProcessorEditor::RoomMultiEQAudioProcessorEditor(RoomMultiEQAudioProcessor& p)
     : AudioProcessorEditor(&p),
       audioProcessor(p),
-      leftChannelComponent(p, true),
-      rightChannelComponent(p, false)
+      leftChannelComponent(p, true, p.getLeftSpectrumCollector(), sampleRate),
+      rightChannelComponent(p, false, p.getRightSpectrumCollector(), sampleRate)
 {
+    sampleRate = p.getCurrentSampleRate();
+
+    // Show Tables button
+    showTablesButton.setButtonText("Show Tables");
+    showTablesButton.onClick = [this]()
+    {
+        tablesVisible = !tablesVisible;
+        showTablesButton.setButtonText(tablesVisible ? "Hide Tables" : "Show Tables");
+        leftChannelComponent.updateLayout();
+        rightChannelComponent.updateLayout();
+    };
+    addAndMakeVisible(showTablesButton);
+
     masterBypassButton.setButtonText("Master Bypass");
     masterBypassButton.setClickingTogglesState(true);
     addAndMakeVisible(masterBypassButton);
@@ -360,9 +408,18 @@ void RoomMultiEQAudioProcessorEditor::resized()
 {
     auto bounds = getLocalBounds();
 
-    auto topBar = bounds.removeFromTop(45);
-    masterBypassButton.setBounds(topBar.removeFromRight(130).reduced(5));
+    // Header area
+    auto headerArea = bounds.removeFromTop(45);
+    headerArea.removeFromLeft(10);
 
+    // Title on left (handled in paint())
+
+    // Buttons on right
+    auto buttonArea = headerArea.removeFromRight(240);
+    masterBypassButton.setBounds(buttonArea.removeFromRight(130).reduced(5));
+    showTablesButton.setBounds(buttonArea.removeFromRight(100).reduced(5));
+
+    // Split remaining for channels
     auto halfWidth = bounds.getWidth() / 2;
     leftChannelComponent.setBounds(bounds.removeFromLeft(halfWidth));
     rightChannelComponent.setBounds(bounds);

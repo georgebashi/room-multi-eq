@@ -2,12 +2,15 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
+#include "SpectrumAnalyzer.h"
+
+class RoomMultiEQAudioProcessorEditor;  // Forward declaration
 
 class ChannelEQComponent : public juce::Component,
                            public juce::TableListBoxModel
 {
 public:
-    ChannelEQComponent(RoomMultiEQAudioProcessor& processor, bool isLeft);
+    ChannelEQComponent(RoomMultiEQAudioProcessor& processor, bool isLeft, SpectrumDataCollector& collector, double& sampleRate);
     ~ChannelEQComponent() override;
 
     void paint(juce::Graphics& g) override;
@@ -20,6 +23,7 @@ public:
     juce::Component* refreshComponentForCell(int rowNumber, int columnId, bool isRowSelected, juce::Component* existingComponentToUpdate) override;
 
     void updateVisibleBands();
+    void updateLayout();
 
 private:
     void importFilterFile();
@@ -41,6 +45,9 @@ private:
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> comboAttachments;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> buttonAttachments;
 
+    std::unique_ptr<SpectrumAnalyzer> spectrumAnalyzer;
+    double& sampleRateRef;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ChannelEQComponent)
 };
 
@@ -53,6 +60,8 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
 
+    bool areTablesVisible() const { return tablesVisible; }
+
 private:
     RoomMultiEQAudioProcessor& audioProcessor;
 
@@ -61,6 +70,10 @@ private:
 
     ChannelEQComponent leftChannelComponent;
     ChannelEQComponent rightChannelComponent;
+
+    juce::TextButton showTablesButton;
+    bool tablesVisible = false;
+    double sampleRate = 44100.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RoomMultiEQAudioProcessorEditor)
 };
