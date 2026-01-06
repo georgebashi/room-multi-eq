@@ -82,6 +82,13 @@ target_link_libraries(RoomMultiEQ
         juce::juce_recommended_warning_flags
 )
 
+# Compiler-specific flag to treat warnings as errors
+if(MSVC)
+    set(WERROR_FLAG "/WX")
+else()
+    set(WERROR_FLAG "-Werror")
+endif()
+
 # Treat warnings as errors for our source files only
 set_source_files_properties(
     Source/PluginProcessor.cpp
@@ -89,7 +96,7 @@ set_source_files_properties(
     Source/EQBand.cpp
     Source/ChannelEQ.cpp
     Source/FilterFileParser.cpp
-    PROPERTIES COMPILE_FLAGS "-Werror"
+    PROPERTIES COMPILE_FLAGS "${WERROR_FLAG}"
 )
 
 # Test executable
@@ -119,5 +126,5 @@ set_source_files_properties(
     Source/FilterFileParser.cpp
     Source/EQBand.cpp
     Source/ChannelEQ.cpp
-    PROPERTIES COMPILE_FLAGS "-Werror"
+    PROPERTIES COMPILE_FLAGS "${WERROR_FLAG}"
 )
