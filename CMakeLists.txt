@@ -147,6 +147,9 @@ if(ROOMMULTIEQ_BUILD_SCREENSHOT)
         Source/EQBand.cpp
         Source/ChannelEQ.cpp
         Source/FilterFileParser.cpp
+        Source/SpectrumDataCollector.cpp
+        Source/FilterResponseCalculator.cpp
+        Source/SpectrumAnalyzer.cpp
     )
 
     target_link_libraries(RoomMultiEQ_Screenshot
