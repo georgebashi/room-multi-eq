@@ -1,6 +1,6 @@
 # Room Multi EQ
 
-An audio plugin for applying independent parametric EQ to left and right channels, designed for loading Room EQ Wizard (REW) filter profiles. Available as AudioUnit (macOS), VST3 (Windows), and LV2 (Linux).
+An audio plugin for applying independent parametric EQ to left and right channels, designed for loading [Room EQ Wizard](https://www.roomeqwizard.com/) (REW) filter profiles. Available as AudioUnit (macOS), VST3 (Windows), and LV2 (Linux).
 
 ## Overview
 
