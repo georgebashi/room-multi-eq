@@ -55,7 +55,7 @@ jobs:
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DROOMMULTIEQ_VERSION=${{ steps.version.outputs.version }}
+            -DROOMMULTIEQ_BUILD_VERSION=${{ steps.version.outputs.version }}
 
       - name: Build
         run: cmake --build build --config Release
@@ -86,7 +86,7 @@ jobs:
 
       - name: Configure
         run: |
-          cmake -B build -DROOMMULTIEQ_VERSION=${{ steps.version.outputs.version }}
+          cmake -B build -DROOMMULTIEQ_BUILD_VERSION=${{ steps.version.outputs.version }}
 
       - name: Build
         run: cmake --build build --config Release
@@ -136,7 +136,7 @@ jobs:
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DROOMMULTIEQ_VERSION=${{ steps.version.outputs.version }}
+            -DROOMMULTIEQ_BUILD_VERSION=${{ steps.version.outputs.version }}
 
       - name: Build
         run: cmake --build build
