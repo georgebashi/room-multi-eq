@@ -55,10 +55,5 @@ private:
     ChannelEQ leftChannel;
     ChannelEQ rightChannel;
 
-    std::atomic<bool> masterBypassed { false };
-
-    juce::dsp::Gain<float> leftGainSmoother;
-    juce::dsp::Gain<float> rightGainSmoother;
-
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RoomMultiEQAudioProcessor)
 };

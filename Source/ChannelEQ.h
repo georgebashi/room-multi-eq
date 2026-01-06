@@ -18,8 +18,6 @@ public:
     EQBand& getBand(int index);
     const EQBand& getBand(int index) const;
 
-    void clearAll();
-
 private:
     std::array<EQBand, NUM_EQ_BANDS> bands;
 };

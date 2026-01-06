@@ -102,15 +102,3 @@ ParsedFilter FilterFileParser::parseLine(const juce::String& line)
 
     return filter;
 }
-
-FilterType FilterFileParser::parseFilterType(const juce::String& typeStr)
-{
-    if (typeStr.equalsIgnoreCase("PK"))
-        return FilterType::Peak;
-    if (typeStr.equalsIgnoreCase("LS"))
-        return FilterType::LowShelf;
-    if (typeStr.equalsIgnoreCase("HS"))
-        return FilterType::HighShelf;
-
-    return FilterType::Peak;
-}

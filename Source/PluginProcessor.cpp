@@ -101,13 +101,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout RoomMultiEQAudioProcessor::c
     return layout;
 }
 
-void RoomMultiEQAudioProcessor::parameterChanged(const juce::String& parameterID, float newValue)
+void RoomMultiEQAudioProcessor::parameterChanged(const juce::String& parameterID, float)
 {
     if (parameterID == "master_bypass")
-    {
-        masterBypassed = newValue > 0.5f;
         return;
-    }
 
     // Parse channel and band from parameter ID
     bool isLeft = parameterID.startsWith("left_");
@@ -201,9 +198,6 @@ void RoomMultiEQAudioProcessor::prepareToPlay(double sampleRate, int samplesPerB
 
     leftChannel.prepare(spec);
     rightChannel.prepare(spec);
-
-    // Initialize master bypass from parameter
-    masterBypassed = *apvts.getRawParameterValue("master_bypass") > 0.5f;
 
     // Initialize all bands from current parameter values
     for (int b = 0; b < NUM_EQ_BANDS; ++b)

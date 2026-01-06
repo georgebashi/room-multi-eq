@@ -21,5 +21,4 @@ public:
 
 private:
     static ParsedFilter parseLine(const juce::String& line);
-    static FilterType parseFilterType(const juce::String& typeStr);
 };
