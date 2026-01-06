@@ -8,7 +8,7 @@ constexpr int NUM_EQ_BANDS = 16;
 class ChannelEQ
 {
 public:
-    ChannelEQ();
+    ChannelEQ() = default;
 
     void prepare(const juce::dsp::ProcessSpec& spec);
     void reset();

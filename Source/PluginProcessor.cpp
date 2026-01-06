@@ -2,11 +2,6 @@
 #include "PluginEditor.h"
 #include "FilterFileParser.h"
 
-static juce::String getParamID(const juce::String& channel, int band, const juce::String& param)
-{
-    return channel + "_band_" + juce::String(band + 1) + "_" + param;
-}
-
 RoomMultiEQAudioProcessor::RoomMultiEQAudioProcessor()
     : AudioProcessor(BusesProperties()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
@@ -277,29 +272,27 @@ void RoomMultiEQAudioProcessor::setStateInformation(const void* data, int sizeIn
     }
 }
 
+void RoomMultiEQAudioProcessor::resetBandToDefaults(const juce::String& channel, int band)
+{
+    if (auto* param = apvts.getParameter(getParamID(channel, band, "freq")))
+        param->setValueNotifyingHost(param->convertTo0to1(1000.0f));
+    if (auto* param = apvts.getParameter(getParamID(channel, band, "gain")))
+        param->setValueNotifyingHost(param->convertTo0to1(0.0f));
+    if (auto* param = apvts.getParameter(getParamID(channel, band, "q")))
+        param->setValueNotifyingHost(param->convertTo0to1(1.0f));
+    if (auto* param = apvts.getParameter(getParamID(channel, band, "type")))
+        param->setValueNotifyingHost(0.0f);
+    if (auto* param = apvts.getParameter(getParamID(channel, band, "bypass")))
+        param->setValueNotifyingHost(1.0f);
+}
+
 void RoomMultiEQAudioProcessor::loadFilterFile(bool isLeftChannel, const juce::File& file)
 {
     auto filters = FilterFileParser::parseFile(file);
     juce::String channel = isLeftChannel ? "left" : "right";
 
-    // Reset all bands to defaults first
     for (int b = 0; b < NUM_EQ_BANDS; ++b)
-    {
-        if (auto* param = apvts.getParameter(getParamID(channel, b, "freq")))
-            param->setValueNotifyingHost(param->convertTo0to1(1000.0f));
-
-        if (auto* param = apvts.getParameter(getParamID(channel, b, "gain")))
-            param->setValueNotifyingHost(param->convertTo0to1(0.0f));
-
-        if (auto* param = apvts.getParameter(getParamID(channel, b, "q")))
-            param->setValueNotifyingHost(param->convertTo0to1(1.0f));
-
-        if (auto* param = apvts.getParameter(getParamID(channel, b, "type")))
-            param->setValueNotifyingHost(0.0f);  // Peak
-
-        if (auto* param = apvts.getParameter(getParamID(channel, b, "bypass")))
-            param->setValueNotifyingHost(1.0f);  // Bypassed
-    }
+        resetBandToDefaults(channel, b);
 
     // Apply parsed filters
     for (size_t i = 0; i < filters.size() && i < NUM_EQ_BANDS; ++i)

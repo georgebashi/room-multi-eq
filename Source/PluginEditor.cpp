@@ -1,63 +1,16 @@
 #include "PluginEditor.h"
 
-static juce::String getParamID(const juce::String& channel, int band, const juce::String& param)
-{
-    return channel + "_band_" + juce::String(band + 1) + "_" + param;
-}
-
 //==============================================================================
 // Custom cell components
 //==============================================================================
 
-class FreqSliderCell : public juce::Component
+class SliderCell : public juce::Component
 {
 public:
-    FreqSliderCell(juce::AudioProcessorValueTreeState& apvts, const juce::String& paramID)
+    SliderCell(juce::AudioProcessorValueTreeState& apvts, const juce::String& paramID, int textBoxWidth)
     {
         slider.setSliderStyle(juce::Slider::LinearBar);
-        slider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 70, 20);
-        slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
-        addAndMakeVisible(slider);
-
-        attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-            apvts, paramID, slider);
-    }
-
-    void resized() override { slider.setBounds(getLocalBounds()); }
-
-private:
-    juce::Slider slider;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
-};
-
-class GainSliderCell : public juce::Component
-{
-public:
-    GainSliderCell(juce::AudioProcessorValueTreeState& apvts, const juce::String& paramID)
-    {
-        slider.setSliderStyle(juce::Slider::LinearBar);
-        slider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 50, 20);
-        slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
-        addAndMakeVisible(slider);
-
-        attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-            apvts, paramID, slider);
-    }
-
-    void resized() override { slider.setBounds(getLocalBounds()); }
-
-private:
-    juce::Slider slider;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
-};
-
-class QSliderCell : public juce::Component
-{
-public:
-    QSliderCell(juce::AudioProcessorValueTreeState& apvts, const juce::String& paramID)
-    {
-        slider.setSliderStyle(juce::Slider::LinearBar);
-        slider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 40, 20);
+        slider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, textBoxWidth, 20);
         slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
         addAndMakeVisible(slider);
 
@@ -241,9 +194,9 @@ bool ChannelEQComponent::isBandActive(int bandIndex) const
     constexpr float gainDefault = 0.0f;
     constexpr float qDefault = 1.0f;
 
-    auto* freqParam = apvts.getParameter(getParamID(channelPrefix, bandIndex, "freq"));
-    auto* gainParam = apvts.getParameter(getParamID(channelPrefix, bandIndex, "gain"));
-    auto* qParam = apvts.getParameter(getParamID(channelPrefix, bandIndex, "q"));
+    auto* freqParam = apvts.getParameter(RoomMultiEQAudioProcessor::getParamID(channelPrefix, bandIndex, "freq"));
+    auto* gainParam = apvts.getParameter(RoomMultiEQAudioProcessor::getParamID(channelPrefix, bandIndex, "gain"));
+    auto* qParam = apvts.getParameter(RoomMultiEQAudioProcessor::getParamID(channelPrefix, bandIndex, "q"));
 
     if (!freqParam || !gainParam || !qParam)
         return true;  // Show if we can't check
@@ -323,15 +276,15 @@ juce::Component* ChannelEQComponent::refreshComponentForCell(int rowNumber, int 
     switch (columnId)
     {
         case 2: // Bypass
-            return new BypassButtonCell(apvts, getParamID(channelPrefix, bandIndex, "bypass"));
+            return new BypassButtonCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelPrefix, bandIndex, "bypass"));
         case 3: // Type
-            return new TypeComboCell(apvts, getParamID(channelPrefix, bandIndex, "type"));
+            return new TypeComboCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelPrefix, bandIndex, "type"));
         case 4: // Freq
-            return new FreqSliderCell(apvts, getParamID(channelPrefix, bandIndex, "freq"));
+            return new SliderCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelPrefix, bandIndex, "freq"), 70);
         case 5: // Gain
-            return new GainSliderCell(apvts, getParamID(channelPrefix, bandIndex, "gain"));
+            return new SliderCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelPrefix, bandIndex, "gain"), 50);
         case 6: // Q
-            return new QSliderCell(apvts, getParamID(channelPrefix, bandIndex, "q"));
+            return new SliderCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelPrefix, bandIndex, "q"), 40);
         default:
             return nullptr;
     }
@@ -359,25 +312,8 @@ void ChannelEQComponent::importFilterFile()
 
 void ChannelEQComponent::clearAll()
 {
-    auto& apvts = processor.getAPVTS();
-
     for (int b = 0; b < NUM_EQ_BANDS; ++b)
-    {
-        if (auto* param = apvts.getParameter(getParamID(channelPrefix, b, "freq")))
-            param->setValueNotifyingHost(param->convertTo0to1(1000.0f));
-
-        if (auto* param = apvts.getParameter(getParamID(channelPrefix, b, "gain")))
-            param->setValueNotifyingHost(param->convertTo0to1(0.0f));
-
-        if (auto* param = apvts.getParameter(getParamID(channelPrefix, b, "q")))
-            param->setValueNotifyingHost(param->convertTo0to1(1.0f));
-
-        if (auto* param = apvts.getParameter(getParamID(channelPrefix, b, "type")))
-            param->setValueNotifyingHost(0.0f);
-
-        if (auto* param = apvts.getParameter(getParamID(channelPrefix, b, "bypass")))
-            param->setValueNotifyingHost(1.0f);
-    }
+        processor.resetBandToDefaults(channelPrefix, b);
 
     updateVisibleBands();
 }

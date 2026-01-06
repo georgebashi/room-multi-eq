@@ -46,6 +46,12 @@ public:
     ChannelEQ& getRightChannel() { return rightChannel; }
 
     void loadFilterFile(bool leftChannel, const juce::File& file);
+    void resetBandToDefaults(const juce::String& channel, int band);
+
+    static juce::String getParamID(const juce::String& channel, int band, const juce::String& param)
+    {
+        return channel + "_band_" + juce::String(band + 1) + "_" + param;
+    }
 
 private:
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

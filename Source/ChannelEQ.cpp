@@ -1,9 +1,5 @@
 #include "ChannelEQ.h"
 
-ChannelEQ::ChannelEQ()
-{
-}
-
 void ChannelEQ::prepare(const juce::dsp::ProcessSpec& spec)
 {
     for (auto& band : bands)
