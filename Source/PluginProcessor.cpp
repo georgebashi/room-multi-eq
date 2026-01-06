@@ -55,10 +55,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout RoomMultiEQAudioProcessor::c
                 channelName + " Band " + bandNum + " Freq",
                 juce::NormalisableRange<float>(20.0f, 20000.0f, 0.1f, 0.3f),
                 1000.0f,
-                juce::String(),
-                juce::AudioProcessorParameter::genericParameter,
-                [](float value, int) { return juce::String(value, 1) + " Hz"; },
-                nullptr));
+                juce::AudioParameterFloatAttributes()
+                    .withStringFromValueFunction([](float value, int) { return juce::String(value, 1) + " Hz"; })));
 
             // Gain
             layout.add(std::make_unique<juce::AudioParameterFloat>(
@@ -66,10 +64,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout RoomMultiEQAudioProcessor::c
                 channelName + " Band " + bandNum + " Gain",
                 juce::NormalisableRange<float>(-20.0f, 20.0f, 0.1f),
                 0.0f,
-                juce::String(),
-                juce::AudioProcessorParameter::genericParameter,
-                [](float value, int) { return juce::String(value, 1) + " dB"; },
-                nullptr));
+                juce::AudioParameterFloatAttributes()
+                    .withStringFromValueFunction([](float value, int) { return juce::String(value, 1) + " dB"; })));
 
             // Q
             layout.add(std::make_unique<juce::AudioParameterFloat>(
