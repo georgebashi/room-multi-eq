@@ -27,9 +27,14 @@ auval -v aufx Rmeq Gbsh   # Validate this plugin
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DROOMMULTIEQ_BUILD_SCREENSHOT=ON
 cmake --build build -j --target RoomMultiEQ_Screenshot
 ./build/RoomMultiEQ_Screenshot
+
+# Build AU and restart SoundSource to test changes
+cd build && cmake --build . --target RoomMultiEQ_AU && osascript -e 'quit app "SoundSource"'; killall -9 AudioComponentRegistrar 2>/dev/null; sleep 1; open -a SoundSource
 ```
 
 The plugin is automatically copied to `~/Library/Audio/Plug-Ins/Components/` after build (COPY_PLUGIN_AFTER_BUILD is enabled).
+
+**Important:** When iterating on plugin changes, always use the "Build AU and restart SoundSource" command to test. This ensures the AudioUnit cache is cleared and SoundSource picks up the new version.
 
 ## Architecture
 
