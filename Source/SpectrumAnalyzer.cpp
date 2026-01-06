@@ -224,11 +224,13 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
 
     const float binWidth = static_cast<float>(sr) / static_cast<float>(SpectrumDataCollector::fftSize);
     const float minLineThickness = 1.0f;  // Minimum 1px line thickness
+    const float boostThresholdDB = 0.5f;  // Hysteresis to prevent flickering
 
     // We'll draw segments, each colored based on boost vs cut
     struct Point {
         float x, yMin, yMax;
         bool isBoost;  // true = output > input (white), false = output < input (purple)
+        bool hasData;  // false = gap in data (both below floor)
     };
     std::vector<Point> points;
 
@@ -238,11 +240,10 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
         if (freq < minFreq || freq > maxFreq)
             continue;
 
-        // Skip if both input and output are at or below the floor (no data to display)
-        if (smoothedInput[i] <= minDB && smoothedOutput[i] <= minDB)
-            continue;
-
         float x = bounds.getX() + frequencyToX(freq) * bounds.getWidth();
+
+        // Check if both input and output are at or below the floor (no data to display)
+        bool hasData = !(smoothedInput[i] <= minDB && smoothedOutput[i] <= minDB);
 
         float inputDB = std::clamp(smoothedInput[i], minDB, maxDB);
         float outputDB = std::clamp(smoothedOutput[i], minDB, maxDB);
@@ -254,33 +255,44 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
         float yMin = std::min(yInput, yOutput);
         float yMax = std::max(yInput, yOutput);
 
-        // Ensure minimum thickness
-        if (yMax - yMin < minLineThickness)
+        // Ensure minimum thickness when there's data
+        if (hasData && yMax - yMin < minLineThickness)
         {
             float center = (yMin + yMax) / 2.0f;
             yMin = center - minLineThickness / 2.0f;
             yMax = center + minLineThickness / 2.0f;
         }
 
-        // isBoost: output > input means outputDB > inputDB means yOutput < yInput (inverted y)
-        bool isBoost = outputDB > inputDB;
+        // isBoost with hysteresis: only switch color when difference exceeds threshold
+        // This prevents flickering when input and output are nearly equal
+        bool isBoost = (outputDB - inputDB) > boostThresholdDB;
 
-        points.push_back({x, yMin, yMax, isBoost});
+        points.push_back({x, yMin, yMax, isBoost, hasData});
     }
 
     if (points.empty())
         return;
 
-    // Draw filled regions by finding contiguous sections of same color
+    // Draw filled regions, handling gaps in data
     size_t i = 0;
     while (i < points.size())
     {
+        // Skip gaps (no data)
+        while (i < points.size() && !points[i].hasData)
+            ++i;
+
+        if (i >= points.size())
+            break;
+
         bool currentBoost = points[i].isBoost;
         size_t start = i;
 
-        // Find end of contiguous same-color region
-        while (i < points.size() && points[i].isBoost == currentBoost)
+        // Find end of contiguous same-color region (stop at gaps or color change)
+        while (i < points.size() && points[i].hasData && points[i].isBoost == currentBoost)
             ++i;
+
+        if (i == start)
+            continue;
 
         // Build path for this region
         juce::Path path;
