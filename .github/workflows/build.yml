@@ -30,6 +30,14 @@ jobs:
             libglu1-mesa-dev \
             mesa-common-dev
 
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: ${{ runner.os }}-cmake-test-${{ hashFiles('CMakeLists.txt', 'src/**', 'tests/**') }}
+          restore-keys: |
+            ${{ runner.os }}-cmake-test-
+
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
 
@@ -44,6 +52,14 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: ${{ runner.os }}-cmake-${{ hashFiles('CMakeLists.txt', 'src/**') }}
+          restore-keys: |
+            ${{ runner.os }}-cmake-
 
       - name: Generate version
         id: version
@@ -81,6 +97,14 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: ${{ runner.os }}-cmake-${{ hashFiles('CMakeLists.txt', 'src/**') }}
+          restore-keys: |
+            ${{ runner.os }}-cmake-
 
       - name: Generate version
         id: version
@@ -132,6 +156,14 @@ jobs:
             libxrender-dev \
             libglu1-mesa-dev \
             mesa-common-dev
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: ${{ runner.os }}-cmake-${{ hashFiles('CMakeLists.txt', 'src/**') }}
+          restore-keys: |
+            ${{ runner.os }}-cmake-
 
       - name: Generate version
         id: version
