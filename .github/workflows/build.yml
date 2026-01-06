@@ -42,7 +42,7 @@ jobs:
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build tests
-        run: cmake --build build --target RoomMultiEQ_Tests
+        run: cmake --build build -j --target RoomMultiEQ_Tests
 
       - name: Run tests
         run: ./build/RoomMultiEQ_Tests
@@ -79,7 +79,7 @@ jobs:
             -DROOMMULTIEQ_BUILD_VERSION=${{ steps.version.outputs.display_version }}
 
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build -j --config Release
 
       - name: Package
         run: |
@@ -120,7 +120,7 @@ jobs:
           cmake -B build -DROOMMULTIEQ_CMAKE_VERSION=${{ steps.version.outputs.cmake_version }} -DROOMMULTIEQ_BUILD_VERSION=${{ steps.version.outputs.display_version }}
 
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build -j --config Release
 
       - name: Package
         shell: bash
@@ -181,7 +181,7 @@ jobs:
             -DROOMMULTIEQ_BUILD_VERSION=${{ steps.version.outputs.display_version }}
 
       - name: Build
-        run: cmake --build build
+        run: cmake --build build -j
 
       - name: Package
         run: |

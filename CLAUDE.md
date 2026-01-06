@@ -12,11 +12,11 @@ Room Multi EQ is a macOS AudioUnit plugin that applies independent parametric EQ
 # Configure (first time or after CMakeLists.txt changes)
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 
-# Build plugin
-cmake --build build
+# Build plugin (use all CPU cores)
+cmake --build build -j
 
 # Build and run tests
-cmake --build build --target RoomMultiEQ_Tests
+cmake --build build -j --target RoomMultiEQ_Tests
 ./build/RoomMultiEQ_Tests
 
 # Validate AudioUnit
