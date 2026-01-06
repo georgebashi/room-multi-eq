@@ -31,9 +31,11 @@ void SpectrumAnalyzer::stopAnalysis()
 
 void SpectrumAnalyzer::forceUpdate()
 {
-    // Directly copy spectrum data without smoothing (for testing)
-    auto inputSpectrum = collector.getInputSpectrum();
-    auto outputSpectrum = collector.getOutputSpectrum();
+    double sr = processorRef.getCurrentSampleRate();
+
+    // Directly copy spectrum data without time smoothing (for testing)
+    auto inputSpectrum = collector.getInputSpectrum(sr);
+    auto outputSpectrum = collector.getOutputSpectrum(sr);
 
     for (size_t i = 0; i < smoothedInput.size() && i < inputSpectrum.size(); ++i)
     {
@@ -44,11 +46,13 @@ void SpectrumAnalyzer::forceUpdate()
 
 void SpectrumAnalyzer::timerCallback()
 {
-    // Get new spectrum data
-    auto inputSpectrum = collector.getInputSpectrum();
-    auto outputSpectrum = collector.getOutputSpectrum();
+    double sr = processorRef.getCurrentSampleRate();
 
-    // Apply smoothing
+    // Get new spectrum data with psychoacoustic smoothing
+    auto inputSpectrum = collector.getInputSpectrum(sr);
+    auto outputSpectrum = collector.getOutputSpectrum(sr);
+
+    // Apply time smoothing
     for (size_t i = 0; i < smoothedInput.size() && i < inputSpectrum.size(); ++i)
     {
         smoothedInput[i] = smoothingFactor * smoothedInput[i] + (1.0f - smoothingFactor) * inputSpectrum[i];
