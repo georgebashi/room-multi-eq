@@ -77,6 +77,16 @@ target_link_libraries(RoomMultiEQ
         juce::juce_recommended_warning_flags
 )
 
+# Treat warnings as errors for our source files only
+set_source_files_properties(
+    Source/PluginProcessor.cpp
+    Source/PluginEditor.cpp
+    Source/EQBand.cpp
+    Source/ChannelEQ.cpp
+    Source/FilterFileParser.cpp
+    PROPERTIES COMPILE_FLAGS "-Werror"
+)
+
 # Test executable
 add_executable(RoomMultiEQ_Tests
     Source/Tests.cpp
@@ -96,4 +106,13 @@ target_compile_definitions(RoomMultiEQ_Tests
         JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
+)
+
+# Treat warnings as errors for test source files
+set_source_files_properties(
+    Source/Tests.cpp
+    Source/FilterFileParser.cpp
+    Source/EQBand.cpp
+    Source/ChannelEQ.cpp
+    PROPERTIES COMPILE_FLAGS "-Werror"
 )
