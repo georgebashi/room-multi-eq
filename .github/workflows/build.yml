@@ -85,7 +85,7 @@ jobs:
         run: cmake --build build -j --config Release
 
       - name: Test
-        run: ./build/RoomMultiEQ_Tests_artefacts/Release/RoomMultiEQ_Tests.exe
+        run: ./build/Release/RoomMultiEQ_Tests.exe
 
       - name: Package
         shell: bash
