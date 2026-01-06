@@ -222,6 +222,9 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
     bounds.removeFromBottom(20.0f);
     bounds.removeFromLeft(25.0f);
 
+    // Clip to bounds so off-screen portions aren't visible
+    g.reduceClipRegion(bounds.toNearestInt());
+
     const float binWidth = static_cast<float>(sr) / static_cast<float>(SpectrumDataCollector::fftSize);
     const float minLineThickness = 1.0f;  // Minimum 1px line thickness
     const float boostThresholdDB = 0.5f;  // Hysteresis to prevent flickering
