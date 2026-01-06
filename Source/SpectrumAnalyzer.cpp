@@ -101,13 +101,21 @@ void SpectrumAnalyzer::updateAccumulationBuffer()
         juce::Image blurred(juce::Image::ARGB, bounds.getWidth(), bounds.getHeight(), true);
         juce::Graphics blurG(blurred);
 
-        // Draw faded copies offset by 1-2 pixels in each direction
-        float fade = trailFade * 0.25f;  // Each copy gets 1/4 of the fade
+        // Draw faded copies at various offsets for a wider blur
+        float fade = trailFade * 0.125f;  // Each copy gets 1/8 of the fade
         blurG.setOpacity(fade);
+
+        // Inner ring (1px offset)
         blurG.drawImageAt(accumulationBuffer, -1, 0);
         blurG.drawImageAt(accumulationBuffer, 1, 0);
         blurG.drawImageAt(accumulationBuffer, 0, -1);
         blurG.drawImageAt(accumulationBuffer, 0, 1);
+
+        // Outer ring (2px offset)
+        blurG.drawImageAt(accumulationBuffer, -2, 0);
+        blurG.drawImageAt(accumulationBuffer, 2, 0);
+        blurG.drawImageAt(accumulationBuffer, 0, -2);
+        blurG.drawImageAt(accumulationBuffer, 0, 2);
 
         accumulationBuffer = std::move(blurred);
     }
