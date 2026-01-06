@@ -48,14 +48,19 @@ jobs:
       - name: Generate version
         id: version
         run: |
-          VERSION=$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          # Date version for CMake (numeric only): YYYY.M.D (no leading zeros)
+          CMAKE_VERSION=$(date +%Y.%-m.%-d)
+          # Full version for display: YYYY.MM.DD-sha
+          DISPLAY_VERSION=$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)
+          echo "cmake_version=$CMAKE_VERSION" >> $GITHUB_OUTPUT
+          echo "display_version=$DISPLAY_VERSION" >> $GITHUB_OUTPUT
 
       - name: Configure
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DROOMMULTIEQ_BUILD_VERSION=${{ steps.version.outputs.version }}
+            -DROOMMULTIEQ_CMAKE_VERSION=${{ steps.version.outputs.cmake_version }} \
+            -DROOMMULTIEQ_BUILD_VERSION=${{ steps.version.outputs.display_version }}
 
       - name: Build
         run: cmake --build build --config Release
@@ -81,12 +86,14 @@ jobs:
         id: version
         shell: bash
         run: |
-          VERSION=$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          CMAKE_VERSION=$(date +%Y.%-m.%-d)
+          DISPLAY_VERSION=$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)
+          echo "cmake_version=$CMAKE_VERSION" >> $GITHUB_OUTPUT
+          echo "display_version=$DISPLAY_VERSION" >> $GITHUB_OUTPUT
 
       - name: Configure
         run: |
-          cmake -B build -DROOMMULTIEQ_BUILD_VERSION=${{ steps.version.outputs.version }}
+          cmake -B build -DROOMMULTIEQ_CMAKE_VERSION=${{ steps.version.outputs.cmake_version }} -DROOMMULTIEQ_BUILD_VERSION=${{ steps.version.outputs.display_version }}
 
       - name: Build
         run: cmake --build build --config Release
@@ -129,14 +136,17 @@ jobs:
       - name: Generate version
         id: version
         run: |
-          VERSION=$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          CMAKE_VERSION=$(date +%Y.%-m.%-d)
+          DISPLAY_VERSION=$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)
+          echo "cmake_version=$CMAKE_VERSION" >> $GITHUB_OUTPUT
+          echo "display_version=$DISPLAY_VERSION" >> $GITHUB_OUTPUT
 
       - name: Configure
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DROOMMULTIEQ_BUILD_VERSION=${{ steps.version.outputs.version }}
+            -DROOMMULTIEQ_CMAKE_VERSION=${{ steps.version.outputs.cmake_version }} \
+            -DROOMMULTIEQ_BUILD_VERSION=${{ steps.version.outputs.display_version }}
 
       - name: Build
         run: cmake --build build
@@ -161,8 +171,8 @@ jobs:
       - name: Generate version
         id: version
         run: |
-          VERSION=$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          DISPLAY_VERSION=$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)
+          echo "display_version=$DISPLAY_VERSION" >> $GITHUB_OUTPUT
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -181,12 +191,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: Latest Build (${{ steps.version.outputs.version }})
+          name: Latest Build (${{ steps.version.outputs.display_version }})
           prerelease: true
           body: |
             ## Latest Build
 
-            **Version:** ${{ steps.version.outputs.version }}
+            **Version:** ${{ steps.version.outputs.display_version }}
             **Commit:** ${{ github.sha }}
 
             ### Downloads

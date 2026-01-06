@@ -1,8 +1,13 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(RoomMultiEQ VERSION 1.0.0)
+# Allow version override from CI (must be numeric: YYYY.M.D)
+if(NOT DEFINED ROOMMULTIEQ_CMAKE_VERSION)
+    set(ROOMMULTIEQ_CMAKE_VERSION "1.0.0")
+endif()
 
-# Build version for display (set by CI, e.g., -DROOMMULTIEQ_BUILD_VERSION=2025.01.05-abc1234)
+project(RoomMultiEQ VERSION ${ROOMMULTIEQ_CMAKE_VERSION})
+
+# Build version for display (set by CI, e.g., 2025.01.05-abc1234)
 if(NOT DEFINED ROOMMULTIEQ_BUILD_VERSION)
     set(ROOMMULTIEQ_BUILD_VERSION "dev")
 endif()
