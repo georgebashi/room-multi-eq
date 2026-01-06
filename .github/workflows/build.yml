@@ -153,7 +153,7 @@ jobs:
 
       - name: Package
         run: |
-          cd build/RoomMultiEQ_artefacts/LV2
+          cd ~/.lv2
           zip -r "$GITHUB_WORKSPACE/RoomMultiEQ-Linux.zip" "Room Multi EQ.lv2"
 
       - name: Upload artifact
