@@ -1,0 +1,437 @@
+#include "PluginEditor.h"
+
+static juce::String getParamID(const juce::String& channel, int band, const juce::String& param)
+{
+    return channel + "_band_" + juce::String(band + 1) + "_" + param;
+}
+
+//==============================================================================
+// Custom cell components
+//==============================================================================
+
+class FreqSliderCell : public juce::Component
+{
+public:
+    FreqSliderCell(juce::AudioProcessorValueTreeState& apvts, const juce::String& paramID)
+    {
+        slider.setSliderStyle(juce::Slider::LinearBar);
+        slider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 70, 20);
+        slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+        addAndMakeVisible(slider);
+
+        attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+            apvts, paramID, slider);
+    }
+
+    void resized() override { slider.setBounds(getLocalBounds()); }
+
+private:
+    juce::Slider slider;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
+};
+
+class GainSliderCell : public juce::Component
+{
+public:
+    GainSliderCell(juce::AudioProcessorValueTreeState& apvts, const juce::String& paramID)
+    {
+        slider.setSliderStyle(juce::Slider::LinearBar);
+        slider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 50, 20);
+        slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+        addAndMakeVisible(slider);
+
+        attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+            apvts, paramID, slider);
+    }
+
+    void resized() override { slider.setBounds(getLocalBounds()); }
+
+private:
+    juce::Slider slider;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
+};
+
+class QSliderCell : public juce::Component
+{
+public:
+    QSliderCell(juce::AudioProcessorValueTreeState& apvts, const juce::String& paramID)
+    {
+        slider.setSliderStyle(juce::Slider::LinearBar);
+        slider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 40, 20);
+        slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+        addAndMakeVisible(slider);
+
+        attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+            apvts, paramID, slider);
+    }
+
+    void resized() override { slider.setBounds(getLocalBounds()); }
+
+private:
+    juce::Slider slider;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
+};
+
+class TypeComboCell : public juce::Component
+{
+public:
+    TypeComboCell(juce::AudioProcessorValueTreeState& apvts, const juce::String& paramID)
+    {
+        combo.addItem("PK", 1);
+        combo.addItem("LS", 2);
+        combo.addItem("HS", 3);
+        addAndMakeVisible(combo);
+
+        attachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+            apvts, paramID, combo);
+    }
+
+    void resized() override { combo.setBounds(getLocalBounds()); }
+
+private:
+    juce::ComboBox combo;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attachment;
+};
+
+class BypassButtonCell : public juce::Component,
+                         public juce::AudioProcessorValueTreeState::Listener
+{
+public:
+    BypassButtonCell(juce::AudioProcessorValueTreeState& apvts, const juce::String& paramID)
+        : apvtsRef(apvts)
+    {
+        // Display shows filter state (ON/OFF), not bypass state
+        // Toggle ON (lit) = filter enabled = bypass false
+        button.setButtonText("");  // No text, just checkbox
+        button.setClickingTogglesState(true);
+        button.onClick = [this]() {
+            // Invert: button ON means bypass OFF (filter enabled)
+            bool filterEnabled = button.getToggleState();
+            if (auto* param = apvtsRef.getParameter(parameterID))
+                param->setValueNotifyingHost(filterEnabled ? 0.0f : 1.0f);
+        };
+        addAndMakeVisible(button);
+
+        setParameterID(paramID);
+    }
+
+    ~BypassButtonCell() override
+    {
+        if (parameterID.isNotEmpty())
+            apvtsRef.removeParameterListener(parameterID, this);
+    }
+
+    void setParameterID(const juce::String& paramID)
+    {
+        if (parameterID.isNotEmpty())
+            apvtsRef.removeParameterListener(parameterID, this);
+
+        parameterID = paramID;
+        apvtsRef.addParameterListener(parameterID, this);
+        updateButtonState();
+    }
+
+    void resized() override
+    {
+        // Center the checkbox in the cell
+        auto bounds = getLocalBounds();
+        int size = juce::jmin(bounds.getWidth(), bounds.getHeight()) - 4;
+        button.setBounds(bounds.withSizeKeepingCentre(size + 12, size));  // +12 for click area
+    }
+
+private:
+    void parameterChanged(const juce::String&, float) override
+    {
+        juce::MessageManager::callAsync([safeThis = juce::Component::SafePointer<BypassButtonCell>(this)]() {
+            if (safeThis != nullptr)
+                safeThis->updateButtonState();
+        });
+    }
+
+    void updateButtonState()
+    {
+        if (auto* param = apvtsRef.getRawParameterValue(parameterID))
+        {
+            bool bypassed = *param > 0.5f;
+            button.setToggleState(!bypassed, juce::dontSendNotification);
+        }
+    }
+
+    juce::String parameterID;
+    juce::AudioProcessorValueTreeState& apvtsRef;
+    juce::ToggleButton button;
+};
+
+//==============================================================================
+// ChannelEQComponent
+//==============================================================================
+
+ChannelEQComponent::ChannelEQComponent(RoomMultiEQAudioProcessor& p, bool isLeft)
+    : processor(p), isLeftChannel(isLeft)
+{
+    channelPrefix = isLeft ? "left" : "right";
+
+    importButton.setButtonText("Import");
+    importButton.onClick = [this]() { importFilterFile(); };
+    addAndMakeVisible(importButton);
+
+    clearButton.setButtonText("Clear All");
+    clearButton.onClick = [this]() { clearAll(); };
+    addAndMakeVisible(clearButton);
+
+    table.setModel(this);
+    table.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff2a2a2a));
+    table.setRowHeight(24);
+
+    auto& header = table.getHeader();
+    header.addColumn("#", 1, 30, 30, 30);
+    header.addColumn("On", 2, 32, 32, 32);      // Just checkbox, no text
+    header.addColumn("Type", 3, 55, 55, 70);    // Wide enough for "LS" dropdown
+    header.addColumn("Freq", 4, 85, 75, 110);
+    header.addColumn("Gain", 5, 70, 60, 90);
+    header.addColumn("Q", 6, 55, 45, 75);
+
+    addAndMakeVisible(table);
+
+    updateVisibleBands();
+}
+
+ChannelEQComponent::~ChannelEQComponent()
+{
+}
+
+void ChannelEQComponent::paint(juce::Graphics& g)
+{
+    g.fillAll(juce::Colour(0xff353535));
+
+    g.setColour(juce::Colours::white);
+    g.setFont(16.0f);
+    g.drawText(isLeftChannel ? "LEFT CHANNEL" : "RIGHT CHANNEL",
+               10, 5, getWidth() - 20, 25, juce::Justification::centred);
+}
+
+void ChannelEQComponent::resized()
+{
+    auto bounds = getLocalBounds().reduced(5);
+
+    auto topArea = bounds.removeFromTop(30);
+    topArea.removeFromTop(5);
+
+    auto buttonArea = bounds.removeFromTop(30);
+    importButton.setBounds(buttonArea.removeFromLeft(100).reduced(2));
+    clearButton.setBounds(buttonArea.removeFromLeft(80).reduced(2));
+
+    bounds.removeFromTop(5);
+    table.setBounds(bounds);
+}
+
+int ChannelEQComponent::getNumRows()
+{
+    return static_cast<int>(visibleBands.size());
+}
+
+bool ChannelEQComponent::isBandActive(int bandIndex) const
+{
+    // A band is "active" (should be shown) if any parameter differs from defaults.
+    // This means it was specified in an imported file.
+    // We don't hide based on bypass state - user can toggle filters on/off and they stay visible.
+    auto& apvts = processor.getAPVTS();
+
+    constexpr float freqDefault = 1000.0f;
+    constexpr float gainDefault = 0.0f;
+    constexpr float qDefault = 1.0f;
+
+    auto* freqParam = apvts.getParameter(getParamID(channelPrefix, bandIndex, "freq"));
+    auto* gainParam = apvts.getParameter(getParamID(channelPrefix, bandIndex, "gain"));
+    auto* qParam = apvts.getParameter(getParamID(channelPrefix, bandIndex, "q"));
+
+    if (!freqParam || !gainParam || !qParam)
+        return true;  // Show if we can't check
+
+    float actualFreq = freqParam->getValue() * (20000.0f - 20.0f) + 20.0f;  // Manual denormalize for freq
+    float actualGain = gainParam->getValue() * 40.0f - 20.0f;  // -20 to +20
+    float actualQ = qParam->getValue() * (30.0f - 0.1f) + 0.1f;  // 0.1 to 30
+
+    // Note: These are approximations - the actual ranges use skew factors
+    // For freq and Q, just check if normalized value is near default normalized value
+    float freqNormDefault = freqParam->convertTo0to1(freqDefault);
+    float gainNormDefault = gainParam->convertTo0to1(gainDefault);
+    float qNormDefault = qParam->convertTo0to1(qDefault);
+
+    float freqNorm = freqParam->getValue();
+    float gainNorm = gainParam->getValue();
+    float qNorm = qParam->getValue();
+
+    if (std::abs(freqNorm - freqNormDefault) > 0.001f)
+        return true;
+
+    if (std::abs(gainNorm - gainNormDefault) > 0.001f)
+        return true;
+
+    if (std::abs(qNorm - qNormDefault) > 0.001f)
+        return true;
+
+    return false;
+}
+
+int ChannelEQComponent::getBandIndexForRow(int row) const
+{
+    if (row >= 0 && row < static_cast<int>(visibleBands.size()))
+        return visibleBands[static_cast<size_t>(row)];
+    return 0;
+}
+
+void ChannelEQComponent::updateVisibleBands()
+{
+    visibleBands.clear();
+
+    for (int b = 0; b < NUM_EQ_BANDS; ++b)
+    {
+        if (isBandActive(b))
+            visibleBands.push_back(b);
+    }
+
+    table.updateContent();
+    table.repaint();
+}
+
+void ChannelEQComponent::paintRowBackground(juce::Graphics& g, int rowNumber, int width, int height, bool)
+{
+    juce::ignoreUnused(width, height);
+    g.fillAll(rowNumber % 2 == 0 ? juce::Colour(0xff2a2a2a) : juce::Colour(0xff323232));
+}
+
+void ChannelEQComponent::paintCell(juce::Graphics& g, int rowNumber, int columnId, int width, int height, bool)
+{
+    g.setColour(juce::Colours::white);
+
+    if (columnId == 1)
+    {
+        int bandIndex = getBandIndexForRow(rowNumber);
+        g.drawText(juce::String(bandIndex + 1), 2, 0, width - 4, height, juce::Justification::centred);
+    }
+}
+
+juce::Component* ChannelEQComponent::refreshComponentForCell(int rowNumber, int columnId, bool, juce::Component* existing)
+{
+    // Delete existing cell if any - we always create fresh cells to avoid
+    // stale parameter bindings when cells are reused
+    delete existing;
+
+    if (columnId == 1)
+        return nullptr;
+
+    int bandIndex = getBandIndexForRow(rowNumber);
+    auto& apvts = processor.getAPVTS();
+
+    switch (columnId)
+    {
+        case 2: // Bypass
+            return new BypassButtonCell(apvts, getParamID(channelPrefix, bandIndex, "bypass"));
+        case 3: // Type
+            return new TypeComboCell(apvts, getParamID(channelPrefix, bandIndex, "type"));
+        case 4: // Freq
+            return new FreqSliderCell(apvts, getParamID(channelPrefix, bandIndex, "freq"));
+        case 5: // Gain
+            return new GainSliderCell(apvts, getParamID(channelPrefix, bandIndex, "gain"));
+        case 6: // Q
+            return new QSliderCell(apvts, getParamID(channelPrefix, bandIndex, "q"));
+        default:
+            return nullptr;
+    }
+}
+
+void ChannelEQComponent::importFilterFile()
+{
+    auto chooser = std::make_shared<juce::FileChooser>(
+        "Select Filter File",
+        juce::File::getSpecialLocation(juce::File::userHomeDirectory),
+        "*.txt");
+
+    auto chooserFlags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+
+    chooser->launchAsync(chooserFlags, [this, chooser](const juce::FileChooser& fc)
+    {
+        auto file = fc.getResult();
+        if (file.existsAsFile())
+        {
+            processor.loadFilterFile(isLeftChannel, file);
+            updateVisibleBands();
+        }
+    });
+}
+
+void ChannelEQComponent::clearAll()
+{
+    auto& apvts = processor.getAPVTS();
+
+    for (int b = 0; b < NUM_EQ_BANDS; ++b)
+    {
+        if (auto* param = apvts.getParameter(getParamID(channelPrefix, b, "freq")))
+            param->setValueNotifyingHost(param->convertTo0to1(1000.0f));
+
+        if (auto* param = apvts.getParameter(getParamID(channelPrefix, b, "gain")))
+            param->setValueNotifyingHost(param->convertTo0to1(0.0f));
+
+        if (auto* param = apvts.getParameter(getParamID(channelPrefix, b, "q")))
+            param->setValueNotifyingHost(param->convertTo0to1(1.0f));
+
+        if (auto* param = apvts.getParameter(getParamID(channelPrefix, b, "type")))
+            param->setValueNotifyingHost(0.0f);
+
+        if (auto* param = apvts.getParameter(getParamID(channelPrefix, b, "bypass")))
+            param->setValueNotifyingHost(1.0f);
+    }
+
+    updateVisibleBands();
+}
+
+//==============================================================================
+// RoomMultiEQAudioProcessorEditor
+//==============================================================================
+
+RoomMultiEQAudioProcessorEditor::RoomMultiEQAudioProcessorEditor(RoomMultiEQAudioProcessor& p)
+    : AudioProcessorEditor(&p),
+      audioProcessor(p),
+      leftChannelComponent(p, true),
+      rightChannelComponent(p, false)
+{
+    masterBypassButton.setButtonText("Master Bypass");
+    masterBypassButton.setClickingTogglesState(true);
+    addAndMakeVisible(masterBypassButton);
+
+    bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        audioProcessor.getAPVTS(), "master_bypass", masterBypassButton);
+
+    addAndMakeVisible(leftChannelComponent);
+    addAndMakeVisible(rightChannelComponent);
+
+    setSize(700, 550);
+    setResizable(true, true);
+    setResizeLimits(600, 450, 1200, 900);
+}
+
+RoomMultiEQAudioProcessorEditor::~RoomMultiEQAudioProcessorEditor()
+{
+}
+
+void RoomMultiEQAudioProcessorEditor::paint(juce::Graphics& g)
+{
+    g.fillAll(juce::Colour(0xff1e1e1e));
+
+    g.setColour(juce::Colours::white);
+    g.setFont(juce::FontOptions(20.0f).withStyle("Bold"));
+    g.drawText("Room Multi EQ", 10, 5, getWidth() - 150, 35, juce::Justification::centredLeft);
+}
+
+void RoomMultiEQAudioProcessorEditor::resized()
+{
+    auto bounds = getLocalBounds();
+
+    auto topBar = bounds.removeFromTop(45);
+    masterBypassButton.setBounds(topBar.removeFromRight(130).reduced(5));
+
+    auto halfWidth = bounds.getWidth() / 2;
+    leftChannelComponent.setBounds(bounds.removeFromLeft(halfWidth));
+    rightChannelComponent.setBounds(bounds);
+}
