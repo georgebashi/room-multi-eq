@@ -7,13 +7,15 @@
 #include "ChannelEQ.h"
 #include <vector>
 
+class RoomMultiEQAudioProcessor;  // Forward declaration
+
 class SpectrumAnalyzer : public juce::Component,
                           private juce::Timer
 {
 public:
     SpectrumAnalyzer(SpectrumDataCollector& collector,
                      const ChannelEQ& channel,
-                     double& sampleRateRef);
+                     RoomMultiEQAudioProcessor& processor);
     ~SpectrumAnalyzer() override;
 
     void paint(juce::Graphics& g) override;
@@ -21,6 +23,7 @@ public:
 
     void startAnalysis();
     void stopAnalysis();
+    void forceUpdate();  // For testing: manually trigger spectrum update
 
 private:
     void timerCallback() override;
@@ -35,7 +38,7 @@ private:
 
     SpectrumDataCollector& collector;
     const ChannelEQ& channel;
-    double& sampleRate;
+    RoomMultiEQAudioProcessor& processorRef;
 
     std::vector<float> smoothedInput;
     std::vector<float> smoothedOutput;

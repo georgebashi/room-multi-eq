@@ -1,12 +1,13 @@
 // Source/SpectrumAnalyzer.cpp
 #include "SpectrumAnalyzer.h"
+#include "PluginProcessor.h"
 #include "FilterResponseCalculator.h"
 #include <cmath>
 
 SpectrumAnalyzer::SpectrumAnalyzer(SpectrumDataCollector& c,
                                    const ChannelEQ& ch,
-                                   double& sr)
-    : collector(c), channel(ch), sampleRate(sr)
+                                   RoomMultiEQAudioProcessor& p)
+    : collector(c), channel(ch), processorRef(p)
 {
     // Initialize to -100dB (silence) - actual values will smooth in when audio plays
     smoothedInput.resize(SpectrumDataCollector::fftSize / 2, -100.0f);
@@ -26,6 +27,19 @@ void SpectrumAnalyzer::startAnalysis()
 void SpectrumAnalyzer::stopAnalysis()
 {
     stopTimer();
+}
+
+void SpectrumAnalyzer::forceUpdate()
+{
+    // Directly copy spectrum data without smoothing (for testing)
+    auto inputSpectrum = collector.getInputSpectrum();
+    auto outputSpectrum = collector.getOutputSpectrum();
+
+    for (size_t i = 0; i < smoothedInput.size() && i < inputSpectrum.size(); ++i)
+    {
+        smoothedInput[i] = inputSpectrum[i];
+        smoothedOutput[i] = outputSpectrum[i];
+    }
 }
 
 void SpectrumAnalyzer::timerCallback()
@@ -48,6 +62,8 @@ void SpectrumAnalyzer::paint(juce::Graphics& g)
 {
     drawBackground(g);
     drawGrid(g);
+
+    // Draw smoothed spectrum data (updated by timer)
     drawSpectrum(g, smoothedInput, juce::Colour(colInputSpectrum), true);
     drawSpectrum(g, smoothedOutput, juce::Colour(colOutputSpectrum), true);
     drawFilterCurve(g);
@@ -110,7 +126,8 @@ void SpectrumAnalyzer::drawGrid(juce::Graphics& g)
 
 void SpectrumAnalyzer::drawSpectrum(juce::Graphics& g, const std::vector<float>& spectrum, juce::Colour colour, bool filled)
 {
-    if (spectrum.empty() || sampleRate <= 0.0)
+    double sr = processorRef.getCurrentSampleRate();
+    if (spectrum.empty() || sr <= 0.0)
         return;
 
     auto bounds = getLocalBounds().toFloat().reduced(30.0f, 20.0f);
@@ -120,7 +137,7 @@ void SpectrumAnalyzer::drawSpectrum(juce::Graphics& g, const std::vector<float>&
     juce::Path path;
     bool pathStarted = false;
 
-    const float binWidth = static_cast<float>(sampleRate) / static_cast<float>(SpectrumDataCollector::fftSize);
+    const float binWidth = static_cast<float>(sr) / static_cast<float>(SpectrumDataCollector::fftSize);
 
     for (size_t i = 1; i < spectrum.size(); ++i)
     {
@@ -161,14 +178,15 @@ void SpectrumAnalyzer::drawSpectrum(juce::Graphics& g, const std::vector<float>&
 
 void SpectrumAnalyzer::drawFilterCurve(juce::Graphics& g)
 {
-    if (sampleRate <= 0.0)
+    double sr = processorRef.getCurrentSampleRate();
+    if (sr <= 0.0)
         return;
 
     auto bounds = getLocalBounds().toFloat().reduced(30.0f, 20.0f);
     bounds.removeFromBottom(20.0f);
     bounds.removeFromLeft(25.0f);
 
-    auto response = FilterResponseCalculator::calculateResponse(channel, sampleRate, 200);
+    auto response = FilterResponseCalculator::calculateResponse(channel, sr, 200);
 
     juce::Path path;
     const float logMin = std::log10(minFreq);

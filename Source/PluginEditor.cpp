@@ -119,16 +119,16 @@ private:
 // ChannelEQComponent
 //==============================================================================
 
-ChannelEQComponent::ChannelEQComponent(RoomMultiEQAudioProcessor& p, bool isLeft, SpectrumDataCollector& collector, double& sr)
-    : processor(p), isLeftChannel(isLeft), sampleRateRef(sr)
+ChannelEQComponent::ChannelEQComponent(RoomMultiEQAudioProcessor& p, bool isLeft)
+    : processor(p), isLeftChannel(isLeft)
 {
     channelPrefix = isLeft ? "left" : "right";
 
     // Create spectrum analyzer
     spectrumAnalyzer = std::make_unique<SpectrumAnalyzer>(
-        collector,
+        isLeft ? p.getLeftSpectrumCollector() : p.getRightSpectrumCollector(),
         isLeft ? p.getLeftChannel() : p.getRightChannel(),
-        sampleRateRef
+        p
     );
     addAndMakeVisible(*spectrumAnalyzer);
     spectrumAnalyzer->startAnalysis();
@@ -360,11 +360,9 @@ void ChannelEQComponent::clearAll()
 RoomMultiEQAudioProcessorEditor::RoomMultiEQAudioProcessorEditor(RoomMultiEQAudioProcessor& p)
     : AudioProcessorEditor(&p),
       audioProcessor(p),
-      leftChannelComponent(p, true, p.getLeftSpectrumCollector(), sampleRate),
-      rightChannelComponent(p, false, p.getRightSpectrumCollector(), sampleRate)
+      leftChannelComponent(p, true),
+      rightChannelComponent(p, false)
 {
-    sampleRate = p.getCurrentSampleRate();
-
     // Show Tables button
     showTablesButton.setButtonText("Show Tables");
     showTablesButton.onClick = [this]()

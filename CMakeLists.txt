@@ -166,3 +166,30 @@ if(ROOMMULTIEQ_BUILD_SCREENSHOT)
             JucePlugin_Name="Room Multi EQ"
     )
 endif()
+
+# Spectrum test harness (for debugging visualization)
+add_executable(RoomMultiEQ_SpectrumTest
+    Source/SpectrumTest.cpp
+    Source/PluginProcessor.cpp
+    Source/PluginEditor.cpp
+    Source/EQBand.cpp
+    Source/ChannelEQ.cpp
+    Source/FilterFileParser.cpp
+    Source/SpectrumDataCollector.cpp
+    Source/FilterResponseCalculator.cpp
+    Source/SpectrumAnalyzer.cpp
+)
+
+target_link_libraries(RoomMultiEQ_SpectrumTest
+    PRIVATE
+        juce::juce_audio_utils
+        juce::juce_dsp
+)
+
+target_compile_definitions(RoomMultiEQ_SpectrumTest
+    PRIVATE
+        JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JucePlugin_Name="Room Multi EQ"
+)
