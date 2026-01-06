@@ -66,10 +66,7 @@ void SpectrumAnalyzer::paint(juce::Graphics& g)
 {
     drawBackground(g);
     drawGrid(g);
-
-    // Draw smoothed spectrum data (updated by timer)
-    drawSpectrum(g, smoothedInput, juce::Colour(colInputSpectrum), true);
-    drawSpectrum(g, smoothedOutput, juce::Colour(colOutputSpectrum), true);
+    drawDifferenceSpectrum(g);
     drawFilterCurve(g);
 }
 
