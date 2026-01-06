@@ -94,4 +94,6 @@ target_link_libraries(RoomMultiEQ_Tests
 target_compile_definitions(RoomMultiEQ_Tests
     PRIVATE
         JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
 )
