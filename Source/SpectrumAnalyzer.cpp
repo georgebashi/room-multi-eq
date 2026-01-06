@@ -274,6 +274,8 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
         return;
 
     // Draw filled regions, handling gaps in data
+    // At color transitions, include the boundary point in the current region
+    // to avoid gaps between adjacent regions
     size_t i = 0;
     while (i < points.size())
     {
@@ -294,16 +296,22 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
         if (i == start)
             continue;
 
+        // Determine the end index for drawing - include next point if it's a color transition
+        // (not a gap), so adjacent regions share their boundary
+        size_t drawEnd = i;
+        if (i < points.size() && points[i].hasData)
+            drawEnd = i + 1;  // Include the transition point
+
         // Build path for this region
         juce::Path path;
 
         // Top edge (left to right)
         path.startNewSubPath(points[start].x, points[start].yMin);
-        for (size_t j = start + 1; j < i; ++j)
+        for (size_t j = start + 1; j < drawEnd; ++j)
             path.lineTo(points[j].x, points[j].yMin);
 
         // Bottom edge (right to left)
-        for (size_t j = i; j > start; --j)
+        for (size_t j = drawEnd; j > start; --j)
             path.lineTo(points[j - 1].x, points[j - 1].yMax);
 
         path.closeSubPath();
