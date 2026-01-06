@@ -190,6 +190,8 @@ void RoomMultiEQAudioProcessor::prepareToPlay(double sampleRate, int samplesPerB
     leftChannel.prepare(spec);
     rightChannel.prepare(spec);
 
+    currentSampleRate = sampleRate;
+
     // Initialize all bands from current parameter values
     for (int b = 0; b < NUM_EQ_BANDS; ++b)
     {
@@ -229,8 +231,17 @@ void RoomMultiEQAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 
     for (int i = 0; i < buffer.getNumSamples(); ++i)
     {
+        // Capture input
+        leftSpectrumCollector.pushInputSample(leftData[i]);
+        rightSpectrumCollector.pushInputSample(rightData[i]);
+
+        // Process EQ
         leftChannel.processSample(leftData[i]);
         rightChannel.processSample(rightData[i]);
+
+        // Capture output
+        leftSpectrumCollector.pushOutputSample(leftData[i]);
+        rightSpectrumCollector.pushOutputSample(rightData[i]);
     }
 }
 

@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include "ChannelEQ.h"
+#include "SpectrumDataCollector.h"
 
 class RoomMultiEQAudioProcessor : public juce::AudioProcessor,
                                   public juce::AudioProcessorValueTreeState::Listener
@@ -45,6 +46,10 @@ public:
     ChannelEQ& getLeftChannel() { return leftChannel; }
     ChannelEQ& getRightChannel() { return rightChannel; }
 
+    SpectrumDataCollector& getLeftSpectrumCollector() { return leftSpectrumCollector; }
+    SpectrumDataCollector& getRightSpectrumCollector() { return rightSpectrumCollector; }
+    double getCurrentSampleRate() const { return currentSampleRate; }
+
     void loadFilterFile(bool leftChannel, const juce::File& file);
     void resetBandToDefaults(const juce::String& channel, int band);
 
@@ -61,6 +66,10 @@ private:
 
     ChannelEQ leftChannel;
     ChannelEQ rightChannel;
+
+    SpectrumDataCollector leftSpectrumCollector;
+    SpectrumDataCollector rightSpectrumCollector;
+    double currentSampleRate = 44100.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RoomMultiEQAudioProcessor)
 };

@@ -61,6 +61,12 @@ target_sources(RoomMultiEQ
         Source/ChannelEQ.h
         Source/FilterFileParser.cpp
         Source/FilterFileParser.h
+        Source/SpectrumDataCollector.cpp
+        Source/SpectrumDataCollector.h
+        Source/FilterResponseCalculator.cpp
+        Source/FilterResponseCalculator.h
+        Source/SpectrumAnalyzer.cpp
+        Source/SpectrumAnalyzer.h
 )
 
 # Preprocessor definitions
