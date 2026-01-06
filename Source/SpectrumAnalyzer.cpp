@@ -95,38 +95,25 @@ void SpectrumAnalyzer::updateAccumulationBuffer()
         accumulationBuffer = juce::Image(juce::Image::ARGB, bounds.getWidth(), bounds.getHeight(), true);
     }
 
-    // Apply cheap blur by drawing the buffer offset in multiple directions
-    // This softens the trail while keeping the new frame sharp
+    // Apply blur and fade to accumulation buffer
+    // Older data gets progressively more blurry as it accumulates blur each frame
     {
         juce::Image blurred(juce::Image::ARGB, bounds.getWidth(), bounds.getHeight(), true);
         juce::Graphics blurG(blurred);
 
-        // Draw faded copies at various offsets for a wider blur
-        float fade = trailFade * 0.125f;  // Each copy gets 1/8 of the fade
-        blurG.setOpacity(fade);
+        // Draw blurred version: center + offset copies
+        // Center copy (stronger weight)
+        blurG.setOpacity(trailFade * 0.5f);
+        blurG.drawImageAt(accumulationBuffer, 0, 0);
 
-        // Inner ring (1px offset)
+        // Offset copies (spread the blur)
+        blurG.setOpacity(trailFade * 0.125f);
         blurG.drawImageAt(accumulationBuffer, -1, 0);
         blurG.drawImageAt(accumulationBuffer, 1, 0);
         blurG.drawImageAt(accumulationBuffer, 0, -1);
         blurG.drawImageAt(accumulationBuffer, 0, 1);
 
-        // Outer ring (2px offset)
-        blurG.drawImageAt(accumulationBuffer, -2, 0);
-        blurG.drawImageAt(accumulationBuffer, 2, 0);
-        blurG.drawImageAt(accumulationBuffer, 0, -2);
-        blurG.drawImageAt(accumulationBuffer, 0, 2);
-
         accumulationBuffer = std::move(blurred);
-    }
-
-    // Fade the existing buffer
-    {
-        juce::Graphics bufferG(accumulationBuffer);
-
-        // Drawing the background color at (1 - trailFade) opacity fades old content
-        bufferG.setColour(juce::Colour(colBackground).withAlpha(1.0f - trailFade));
-        bufferG.fillAll();
     }
 
     // Draw new spectrum frame onto buffer (sharp, no blur)
