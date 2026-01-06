@@ -85,7 +85,7 @@ int main()
 
     // Verify data in collectors
     auto& leftCollector = processor.getLeftSpectrumCollector();
-    auto spectrum = leftCollector.getInputSpectrum();
+    auto spectrum = leftCollector.getInputSpectrum(sampleRate);
 
     float maxDb = -200.0f;
     int maxBin = 0;
