@@ -246,8 +246,9 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
 
         float x = bounds.getX() + frequencyToX(freq) * bounds.getWidth();
 
-        float inputDB = std::clamp(smoothedInput[i], minDB, maxDB);
-        float outputDB = std::clamp(smoothedOutput[i], minDB, maxDB);
+        // Don't clamp - let values go off-screen for continuous appearance
+        float inputDB = std::clamp(smoothedInput[i], minDB - 20.0f, maxDB);  // Allow 20dB below floor
+        float outputDB = std::clamp(smoothedOutput[i], minDB - 20.0f, maxDB);
 
         // Track data range (where we have signal above the floor)
         bool hasSignal = (smoothedInput[i] > minDB || smoothedOutput[i] > minDB);
