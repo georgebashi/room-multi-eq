@@ -60,6 +60,7 @@ private:
     static constexpr float maxFreq = 20000.0f;
     static constexpr float maxDB = 0.0f;
     static constexpr float minDB = -120.0f;
+    static constexpr float silenceThresholdDB = -90.0f;  // Don't draw below this
 
     // Smoothing factor (0 = no smoothing, 1 = infinite smoothing)
     static constexpr float smoothingFactor = 0.7f;

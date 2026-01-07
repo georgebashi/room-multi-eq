@@ -175,6 +175,18 @@ void MultiChannelSpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g, int
     if (smoothedInput.empty() || smoothedOutput.empty() || sr <= 0.0)
         return;
 
+    // Check if there's any meaningful signal - find peak level
+    float peakLevel = -200.0f;
+    for (size_t i = 1; i < smoothedInput.size(); ++i)
+    {
+        peakLevel = std::max(peakLevel, smoothedInput[i]);
+        peakLevel = std::max(peakLevel, smoothedOutput[i]);
+    }
+
+    // Don't draw if signal is below silence threshold
+    if (peakLevel < silenceThresholdDB)
+        return;
+
     auto bounds = getLocalBounds().toFloat();
 
     // Clip to bounds so off-screen portions aren't visible
