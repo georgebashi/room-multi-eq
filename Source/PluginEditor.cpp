@@ -267,13 +267,6 @@ RoomMultiEQAudioProcessorEditor::RoomMultiEQAudioProcessorEditor(RoomMultiEQAudi
       audioProcessor(p),
       channelTable(p)
 {
-    // Master bypass
-    masterBypassButton.setButtonText("Master Bypass");
-    masterBypassButton.setClickingTogglesState(true);
-    addAndMakeVisible(masterBypassButton);
-    bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        audioProcessor.getAPVTS(), "master_bypass", masterBypassButton);
-
     // Multi-channel spectrum analyzer
     spectrumAnalyzer = std::make_unique<MultiChannelSpectrumAnalyzer>(p);
     addAndMakeVisible(*spectrumAnalyzer);
@@ -414,9 +407,7 @@ void RoomMultiEQAudioProcessorEditor::resized()
     auto bounds = getLocalBounds();
 
     // Header
-    auto headerArea = bounds.removeFromTop(45);
-    headerArea.removeFromLeft(200); // Space for title
-    masterBypassButton.setBounds(headerArea.removeFromRight(130).reduced(5));
+    bounds.removeFromTop(45);
 
     // Spectrum analyzer (40% of remaining height)
     int spectrumHeight = static_cast<int>(bounds.getHeight() * 0.4f);

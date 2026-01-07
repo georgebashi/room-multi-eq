@@ -59,6 +59,13 @@ void MultiChannelSpectrumAnalyzer::timerCallback()
         return;
     }
 
+    // Skip updating spectrum data when audio stopped - accumulation buffer will fade it out
+    if (processor.isAudioStopped())
+    {
+        repaint();
+        return;
+    }
+
     int numChannels = processor.getNumChannels();
     for (int ch = 0; ch < numChannels; ++ch)
     {
@@ -146,6 +153,8 @@ void MultiChannelSpectrumAnalyzer::updateAccumulationBuffer()
 
     // Draw new spectrum frame onto buffer with some transparency
     // This helps it blend with the trail rather than sitting sharply on top
+    // Skip drawing when audio stopped - the blur/fade above will naturally fade out the display
+    if (!processor.isAudioStopped())
     {
         juce::Graphics bufferG(accumulationBuffer);
         bufferG.setOpacity(0.7f);

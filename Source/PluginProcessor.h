@@ -6,6 +6,7 @@
 #include "SpectrumDataCollector.h"
 #include <vector>
 #include <memory>
+#include <atomic>
 
 class RoomMultiEQAudioProcessor : public juce::AudioProcessor,
                                   public juce::AudioProcessorValueTreeState::Listener
@@ -56,6 +57,14 @@ public:
     const std::vector<juce::String>& getChannelNames() const { return channelNames; }
     double getCurrentSampleRate() const { return currentSampleRate; }
 
+    // Returns true if audio processing has stopped (host bypass or no audio flowing)
+    bool isAudioStopped() const
+    {
+        // Check if processBlock hasn't been called recently
+        auto now = juce::Time::getMillisecondCounterHiRes();
+        return (now - lastProcessTime.load()) > 100.0; // 100ms timeout
+    }
+
     // Legacy accessors for backward compatibility
     ChannelEQ& getLeftChannel() { return *channels[0]; }
     ChannelEQ& getRightChannel() { return *channels[static_cast<size_t>(std::min(1, numChannels - 1))]; }
@@ -83,6 +92,7 @@ private:
     std::vector<juce::String> channelNames;
     int numChannels = 0;
     double currentSampleRate = 44100.0;
+    mutable std::atomic<double> lastProcessTime { 0.0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RoomMultiEQAudioProcessor)
 };

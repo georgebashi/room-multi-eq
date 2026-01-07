@@ -12,8 +12,6 @@ RoomMultiEQAudioProcessor::RoomMultiEQAudioProcessor()
     initializeChannels(2, juce::AudioChannelSet::stereo());
 
     // Add parameter listeners for all possible channels
-    apvts.addParameterListener("master_bypass", this);
-
     for (int ch = 0; ch < MAX_CHANNELS; ++ch)
     {
         for (int b = 0; b < NUM_EQ_BANDS; ++b)
@@ -34,12 +32,6 @@ RoomMultiEQAudioProcessor::~RoomMultiEQAudioProcessor()
 juce::AudioProcessorValueTreeState::ParameterLayout RoomMultiEQAudioProcessor::createParameterLayout()
 {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
-
-    // Master bypass
-    layout.add(std::make_unique<juce::AudioParameterBool>(
-        juce::ParameterID("master_bypass", 1),
-        "Master Bypass",
-        false));
 
     // Per-channel, per-band parameters (pre-allocate for MAX_CHANNELS)
     for (int ch = 0; ch < MAX_CHANNELS; ++ch)
@@ -272,8 +264,8 @@ void RoomMultiEQAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 {
     juce::ScopedNoDenormals noDenormals;
 
-    if (*apvts.getRawParameterValue("master_bypass") > 0.5f)
-        return;
+    // Update timestamp for host bypass detection
+    lastProcessTime.store(juce::Time::getMillisecondCounterHiRes());
 
     int numSamples = buffer.getNumSamples();
     int channelsToProcess = std::min(buffer.getNumChannels(), numChannels);

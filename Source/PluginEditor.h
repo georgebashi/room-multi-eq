@@ -111,9 +111,6 @@ private:
 
     RoomMultiEQAudioProcessor& audioProcessor;
 
-    juce::ToggleButton masterBypassButton;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
-
     std::unique_ptr<MultiChannelSpectrumAnalyzer> spectrumAnalyzer;
 
     // Visibility toggles with sparklines
