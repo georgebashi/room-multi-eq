@@ -67,7 +67,7 @@ private:
     static constexpr float smoothingFactor = 0.7f;
 
     // Frame accumulation fade (0 = no trail, 1 = infinite trail)
-    static constexpr float trailFade = 0.88f;
+    static constexpr float trailFade = 0.90f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MultiChannelSpectrumAnalyzer)
 };

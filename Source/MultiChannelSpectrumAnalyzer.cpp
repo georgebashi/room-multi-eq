@@ -186,7 +186,7 @@ void MultiChannelSpectrumAnalyzer::updateAccumulationBuffer(const juce::Image& c
     {
         // Use JUCE's built-in Gaussian blur
         juce::ImageConvolutionKernel kernel(5);  // 5x5 kernel
-        kernel.createGaussianBlur(1.5f);
+        kernel.createGaussianBlur(1.0f);
         kernel.applyToImage(accumulationBuffer, accumulationBuffer, accumulationBuffer.getBounds());
 
         // Apply fade

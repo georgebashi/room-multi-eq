@@ -93,69 +93,127 @@ private:
     juce::Label filenameLabel;
 };
 
-// Sparkline showing filter response curve
-class TableSparkline : public juce::Component,
-                       private juce::Timer
+//==============================================================================
+// FilterResponseGraph - shows all channel filter curves on one graph
+//==============================================================================
+
+class FilterResponseGraph : public juce::Component,
+                            private juce::Timer
 {
 public:
-    TableSparkline(RoomMultiEQAudioProcessor& p, int channel)
-        : processor(p), channelIndex(channel)
+    FilterResponseGraph(RoomMultiEQAudioProcessor& p)
+        : processor(p)
     {
         startTimerHz(10);
     }
 
     void paint(juce::Graphics& g) override
     {
-        auto bounds = getLocalBounds().toFloat().reduced(2);
+        auto bounds = getLocalBounds().toFloat();
 
         // Draw background
         g.setColour(juce::Colour(0xff1a1a1a));
-        g.fillRoundedRectangle(bounds, 3.0f);
+        g.fillAll();
 
         double sr = processor.getCurrentSampleRate();
         if (sr <= 0.0)
             return;
 
-        // Check if channel has a filter loaded
-        if (processor.getLoadedFilename(channelIndex).isEmpty())
+        // Draw grid
+        drawGrid(g, bounds);
+
+        // Draw filter curves for all channels
+        int numChannels = processor.getNumChannels();
+        for (int ch = 0; ch < numChannels; ++ch)
         {
-            // Draw flat line for empty channel
-            g.setColour(juce::Colours::grey.withAlpha(0.3f));
-            float y = bounds.getCentreY();
-            g.drawHorizontalLine(static_cast<int>(y), bounds.getX() + 2, bounds.getRight() - 2);
-            return;
+            if (processor.getLoadedFilename(ch).isEmpty())
+                continue;
+
+            const auto& channel = processor.getChannel(ch);
+            auto response = FilterResponseCalculator::calculateResponse(channel, sr, static_cast<int>(bounds.getWidth()));
+
+            juce::Path path;
+
+            for (int i = 0; i < static_cast<int>(response.size()); ++i)
+            {
+                float x = bounds.getX() + static_cast<float>(i);
+                float db = std::clamp(response[static_cast<size_t>(i)], minDB, maxDB);
+                float y = bounds.getY() + (1.0f - (db - minDB) / (maxDB - minDB)) * bounds.getHeight();
+
+                if (i == 0)
+                    path.startNewSubPath(x, y);
+                else
+                    path.lineTo(x, y);
+            }
+
+            g.setColour(ChannelColors::getChannelColor(ch));
+            g.strokePath(path, juce::PathStrokeType(2.0f));
         }
-
-        const auto& ch = processor.getChannel(channelIndex);
-        auto response = FilterResponseCalculator::calculateResponse(ch, sr, static_cast<int>(bounds.getWidth()));
-
-        juce::Path path;
-        const float minDB = -24.0f;
-        const float maxDB = 24.0f;
-
-        for (int i = 0; i < static_cast<int>(response.size()); ++i)
-        {
-            float x = bounds.getX() + static_cast<float>(i);
-            float db = std::clamp(response[static_cast<size_t>(i)], minDB, maxDB);
-            float y = bounds.getY() + (1.0f - (db - minDB) / (maxDB - minDB)) * bounds.getHeight();
-
-            if (i == 0)
-                path.startNewSubPath(x, y);
-            else
-                path.lineTo(x, y);
-        }
-
-        g.setColour(ChannelColors::getChannelColor(channelIndex));
-        g.strokePath(path, juce::PathStrokeType(1.5f));
     }
 
 private:
     void timerCallback() override { repaint(); }
 
-    RoomMultiEQAudioProcessor& processor;
-    int channelIndex;
+    void drawGrid(juce::Graphics& g, const juce::Rectangle<float>& bounds)
+    {
+        g.setColour(juce::Colour(0xff3a3a3a));
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TableSparkline)
+        // Horizontal lines (dB)
+        for (float db = minDB; db <= maxDB; db += 6.0f)
+        {
+            float y = bounds.getY() + (1.0f - (db - minDB) / (maxDB - minDB)) * bounds.getHeight();
+
+            // Bold line at 0 dB
+            if (db == 0.0f)
+                g.setColour(juce::Colour(0xff5a5a5a));
+            else
+                g.setColour(juce::Colour(0xff3a3a3a));
+
+            g.drawHorizontalLine(static_cast<int>(y), bounds.getX(), bounds.getRight());
+
+            // Label
+            g.setFont(10.0f);
+            g.drawText(juce::String(static_cast<int>(db)) + " dB",
+                      static_cast<int>(bounds.getX()) + 4,
+                      static_cast<int>(y) - 6,
+                      40, 12,
+                      juce::Justification::centredLeft);
+        }
+
+        // Vertical lines (frequency) - logarithmic
+        const float freqs[] = { 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000 };
+        const float logMin = std::log10(20.0f);
+        const float logMax = std::log10(20000.0f);
+
+        for (float freq : freqs)
+        {
+            float logFreq = std::log10(freq);
+            float x = bounds.getX() + (logFreq - logMin) / (logMax - logMin) * bounds.getWidth();
+            g.setColour(juce::Colour(0xff3a3a3a));
+            g.drawVerticalLine(static_cast<int>(x), bounds.getY(), bounds.getBottom());
+
+            // Label
+            juce::String label;
+            if (freq >= 1000)
+                label = juce::String(static_cast<int>(freq / 1000)) + "k";
+            else
+                label = juce::String(static_cast<int>(freq));
+
+            g.setFont(10.0f);
+            g.drawText(label,
+                      static_cast<int>(x) - 15,
+                      static_cast<int>(bounds.getBottom()) - 14,
+                      30, 12,
+                      juce::Justification::centred);
+        }
+    }
+
+    RoomMultiEQAudioProcessor& processor;
+
+    static constexpr float minDB = -24.0f;
+    static constexpr float maxDB = 6.0f;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FilterResponseGraph)
 };
 
 //==============================================================================
@@ -171,9 +229,8 @@ ChannelSummaryTable::ChannelSummaryTable(RoomMultiEQAudioProcessor& p,
     table.setRowHeight(36);
 
     auto& header = table.getHeader();
-    header.addColumn("Channel", 1, 80, 60, 100);
-    header.addColumn("Filter", 2, 200, 150, 300);
-    header.addColumn("Response", 3, 150, 100, -1);  // -1 max = no limit
+    header.addColumn("Channel", 1, 70, 50, 100);
+    header.addColumn("Filter", 2, 130, 100, -1);
     header.setStretchToFitActive(true);
 
     addAndMakeVisible(table);
@@ -227,9 +284,6 @@ juce::Component* ChannelSummaryTable::refreshComponentForCell(int rowNumber, int
     if (columnId == 2)
         return new ImportCell(processor, rowNumber, *this);
 
-    if (columnId == 3)
-        return new TableSparkline(processor, rowNumber);
-
     return nullptr;
 }
 
@@ -263,12 +317,16 @@ RoomMultiEQAudioProcessorEditor::RoomMultiEQAudioProcessorEditor(RoomMultiEQAudi
     channelTable = std::make_unique<ChannelSummaryTable>(p, *spectrumAnalyzer);
     addAndMakeVisible(*channelTable);
 
+    // Filter response graph
+    filterGraph = std::make_unique<FilterResponseGraph>(p);
+    addAndMakeVisible(*filterGraph);
+
     // Initialize visibility state
     updateSpectrumVisibility();
 
-    setSize(600, 450);
+    setSize(700, 450);
     setResizable(true, true);
-    setResizeLimits(500, 350, 1000, 700);
+    setResizeLimits(600, 350, 1200, 800);
 }
 
 RoomMultiEQAudioProcessorEditor::~RoomMultiEQAudioProcessorEditor()
@@ -307,6 +365,11 @@ void RoomMultiEQAudioProcessorEditor::resized()
     // Gap
     bounds.removeFromTop(10);
 
-    // Channel table (remaining space)
-    channelTable->setBounds(bounds.reduced(10, 0));
+    // Bottom panel: table (1/3) and filter graph (2/3)
+    auto bottomPanel = bounds.reduced(10, 0);
+    int tableWidth = bottomPanel.getWidth() / 3;
+
+    channelTable->setBounds(bottomPanel.removeFromLeft(tableWidth));
+    bottomPanel.removeFromLeft(10);  // Gap
+    filterGraph->setBounds(bottomPanel);
 }

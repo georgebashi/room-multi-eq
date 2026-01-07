@@ -35,6 +35,8 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ChannelSummaryTable)
 };
 
+class FilterResponseGraph;
+
 class RoomMultiEQAudioProcessorEditor : public juce::AudioProcessorEditor
 {
 public:
@@ -51,6 +53,7 @@ private:
 
     std::unique_ptr<MultiChannelSpectrumAnalyzer> spectrumAnalyzer;
     std::unique_ptr<ChannelSummaryTable> channelTable;
+    std::unique_ptr<FilterResponseGraph> filterGraph;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RoomMultiEQAudioProcessorEditor)
 };
