@@ -31,7 +31,6 @@ private:
     void timerCallback() override;
 
     void drawBackground(juce::Graphics& g);
-    void drawGrid(juce::Graphics& g);
     void drawFilterCurve(juce::Graphics& g, int channelIndex);
 
     // Motion blur accumulation buffer
@@ -59,16 +58,8 @@ private:
     // Display range
     static constexpr float minFreq = 20.0f;
     static constexpr float maxFreq = 20000.0f;
-
-    // Dynamic range with peak-hold and slow decay
-    float currentMaxDB = 0.0f;            // Current display ceiling (adapts over time)
-    float currentMinDB = -60.0f;          // Current display floor (adapts over time)
-    static constexpr float absoluteMaxDB = 12.0f;    // Absolute highest we'll show
-    static constexpr float absoluteMinDB = -120.0f;  // Absolute lowest we'll show
-    static constexpr float defaultMaxDB = 0.0f;      // Starting/reset value for ceiling
-    static constexpr float defaultMinDB = -60.0f;    // Starting/reset value for floor
-    static constexpr float rangeDecayRate = 3.0f;    // dB per second to contract range
-    static constexpr float rangeMargin = 6.0f;       // Headroom above/below signal
+    static constexpr float maxDB = 0.0f;
+    static constexpr float minDB = -120.0f;
 
     // Smoothing factor (0 = no smoothing, 1 = infinite smoothing)
     static constexpr float smoothingFactor = 0.7f;
