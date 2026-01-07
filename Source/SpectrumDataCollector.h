@@ -21,8 +21,11 @@ public:
     std::vector<float> getInputSpectrum(double sampleRate);
     std::vector<float> getOutputSpectrum(double sampleRate);
 
+    // Get both spectrums atomically (same write index for both)
+    std::pair<std::vector<float>, std::vector<float>> getBothSpectrums(double sampleRate);
+
 private:
-    std::vector<float> computeSpectrum(const std::array<float, fftSize>& ringBuffer);
+    std::vector<float> computeSpectrum(const std::array<float, fftSize>& ringBuffer, int readIdx);
     void applyPsychoacousticSmoothing(std::vector<float>& spectrum, double sampleRate);
 
     juce::dsp::FFT fft;

@@ -23,23 +23,38 @@ void SpectrumDataCollector::pushOutputSample(float sample)
 
 std::vector<float> SpectrumDataCollector::getInputSpectrum(double sampleRate)
 {
-    auto spectrum = computeSpectrum(inputRingBuffer);
+    int readIdx = writeIndex.load(std::memory_order_relaxed);
+    auto spectrum = computeSpectrum(inputRingBuffer, readIdx);
     applyPsychoacousticSmoothing(spectrum, sampleRate);
     return spectrum;
 }
 
 std::vector<float> SpectrumDataCollector::getOutputSpectrum(double sampleRate)
 {
-    auto spectrum = computeSpectrum(outputRingBuffer);
+    int readIdx = writeIndex.load(std::memory_order_relaxed);
+    auto spectrum = computeSpectrum(outputRingBuffer, readIdx);
     applyPsychoacousticSmoothing(spectrum, sampleRate);
     return spectrum;
 }
 
-std::vector<float> SpectrumDataCollector::computeSpectrum(const std::array<float, fftSize>& ringBuffer)
+std::pair<std::vector<float>, std::vector<float>> SpectrumDataCollector::getBothSpectrums(double sampleRate)
 {
-    // Copy ring buffer starting from current write position (oldest sample)
-    std::array<float, fftSize * 2> fftData{};
+    // Capture write index once so both spectrums use the same window of data
     int readIdx = writeIndex.load(std::memory_order_relaxed);
+
+    auto inputSpectrum = computeSpectrum(inputRingBuffer, readIdx);
+    auto outputSpectrum = computeSpectrum(outputRingBuffer, readIdx);
+
+    applyPsychoacousticSmoothing(inputSpectrum, sampleRate);
+    applyPsychoacousticSmoothing(outputSpectrum, sampleRate);
+
+    return {std::move(inputSpectrum), std::move(outputSpectrum)};
+}
+
+std::vector<float> SpectrumDataCollector::computeSpectrum(const std::array<float, fftSize>& ringBuffer, int readIdx)
+{
+    // Copy ring buffer starting from readIdx (oldest sample)
+    std::array<float, fftSize * 2> fftData{};
     for (int i = 0; i < fftSize; ++i)
     {
         fftData[i] = ringBuffer[(readIdx + i) % fftSize];

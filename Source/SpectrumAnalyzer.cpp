@@ -48,9 +48,8 @@ void SpectrumAnalyzer::timerCallback()
 {
     double sr = processorRef.getCurrentSampleRate();
 
-    // Get new spectrum data with psychoacoustic smoothing
-    auto inputSpectrum = collector.getInputSpectrum(sr);
-    auto outputSpectrum = collector.getOutputSpectrum(sr);
+    // Get both spectrums atomically (same time window)
+    auto [inputSpectrum, outputSpectrum] = collector.getBothSpectrums(sr);
 
     // Apply time smoothing
     for (size_t i = 0; i < smoothedInput.size() && i < inputSpectrum.size(); ++i)
@@ -289,34 +288,64 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
     g.reduceClipRegion(bounds.toNearestInt());
 
     const float binWidth = static_cast<float>(sr) / static_cast<float>(SpectrumDataCollector::fftSize);
-    const float minLineThickness = 1.0f;  // Minimum 1px line thickness
+    const float minLineThickness = 1.0f;
 
-    // We'll draw segments, each colored based on boost vs cut
+    // Interpolate spectrum at a given frequency using cubic interpolation between bins
+    auto interpolateSpectrum = [&](const std::vector<float>& spectrum, float freq) -> float {
+        float bin = freq / binWidth;
+        int binInt = static_cast<int>(bin);
+        float frac = bin - static_cast<float>(binInt);
+
+        // Get 4 neighboring bins for cubic interpolation (clamped at edges)
+        auto getBin = [&](int idx) -> float {
+            if (idx < 1) idx = 1;
+            if (idx >= static_cast<int>(spectrum.size())) idx = static_cast<int>(spectrum.size()) - 1;
+            return spectrum[idx];
+        };
+
+        float p0 = getBin(binInt - 1);
+        float p1 = getBin(binInt);
+        float p2 = getBin(binInt + 1);
+        float p3 = getBin(binInt + 2);
+
+        // Catmull-Rom cubic interpolation
+        float t = frac;
+        float t2 = t * t;
+        float t3 = t2 * t;
+
+        return 0.5f * ((2.0f * p1) +
+                       (-p0 + p2) * t +
+                       (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t2 +
+                       (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * t3);
+    };
+
+    // Sample at regular intervals in log-frequency space (screen space)
+    // Use ~2 pixels per sample for smooth curves
+    const int numSamples = static_cast<int>(bounds.getWidth() / 2.0f);
+    const float logMin = std::log10(minFreq);
+    const float logMax = std::log10(maxFreq);
+
     struct Point {
         float x, yMin, yMax;
-        bool isBoost;  // true = output > input (white), false = output < input (purple)
     };
     std::vector<Point> points;
+    points.reserve(numSamples);
 
-    // Track if we've seen any data above the floor
     bool seenData = false;
     size_t firstDataIdx = 0;
     size_t lastDataIdx = 0;
 
-    for (size_t i = 1; i < smoothedInput.size() && i < smoothedOutput.size(); ++i)
+    for (int i = 0; i < numSamples; ++i)
     {
-        float freq = static_cast<float>(i) * binWidth;
-        if (freq < minFreq || freq > maxFreq)
-            continue;
+        float t = static_cast<float>(i) / static_cast<float>(numSamples - 1);
+        float freq = std::pow(10.0f, logMin + t * (logMax - logMin));
+        float x = bounds.getX() + t * bounds.getWidth();
 
-        float x = bounds.getX() + frequencyToX(freq) * bounds.getWidth();
-
-        // Don't clamp - let values go off-screen for continuous appearance
-        float inputDB = std::clamp(smoothedInput[i], minDB - 20.0f, maxDB);  // Allow 20dB below floor
-        float outputDB = std::clamp(smoothedOutput[i], minDB - 20.0f, maxDB);
+        float inputDB = std::clamp(interpolateSpectrum(smoothedInput, freq), minDB - 20.0f, maxDB);
+        float outputDB = std::clamp(interpolateSpectrum(smoothedOutput, freq), minDB - 20.0f, maxDB);
 
         // Track data range (where we have signal above the floor)
-        bool hasSignal = (smoothedInput[i] > minDB || smoothedOutput[i] > minDB);
+        bool hasSignal = (inputDB > minDB || outputDB > minDB);
         if (hasSignal)
         {
             if (!seenData)
@@ -330,7 +359,6 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
         float yInput = bounds.getY() + dbToY(inputDB) * bounds.getHeight();
         float yOutput = bounds.getY() + dbToY(outputDB) * bounds.getHeight();
 
-        // Determine min/max y (remember: lower y = higher dB on screen)
         float yMin = std::min(yInput, yOutput);
         float yMax = std::max(yInput, yOutput);
 
@@ -342,17 +370,14 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
             yMax = center + minLineThickness / 2.0f;
         }
 
-        // isBoost: output > input means the filter is boosting at this frequency
-        bool isBoost = outputDB > inputDB;
-
-        points.push_back({x, yMin, yMax, isBoost});
+        points.push_back({x, yMin, yMax});
     }
 
     // Only draw if we have some data above the floor
     if (!seenData || points.empty())
         return;
 
-    // Trim to only the range where we have data (avoid drawing flat lines at edges)
+    // Trim to only the range where we have data
     if (lastDataIdx + 1 < points.size())
         points.resize(lastDataIdx + 1);
     if (firstDataIdx > 0)
@@ -361,49 +386,22 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
     if (points.empty())
         return;
 
-    // Draw filled regions by color
-    // At color transitions, include the boundary point in the current region
-    // to avoid gaps between adjacent regions
-    size_t i = 0;
-    while (i < points.size())
-    {
-        bool currentBoost = points[i].isBoost;
-        size_t start = i;
+    // Build path - points are already smoothly sampled, use straight lines
+    // (the density of sampling makes curves unnecessary)
+    juce::Path path;
 
-        // Find end of contiguous same-color region
-        while (i < points.size() && points[i].isBoost == currentBoost)
-            ++i;
+    path.startNewSubPath(points[0].x, points[0].yMin);
+    for (size_t i = 1; i < points.size(); ++i)
+        path.lineTo(points[i].x, points[i].yMin);
 
-        if (i == start)
-            continue;
+    for (size_t i = points.size(); i > 0; --i)
+        path.lineTo(points[i - 1].x, points[i - 1].yMax);
 
-        // Determine the end index for drawing - include next point if it's a color transition
-        // so adjacent regions share their boundary
-        size_t drawEnd = i;
-        if (i < points.size())
-            drawEnd = i + 1;  // Include the transition point
+    path.closeSubPath();
 
-        // Build path for this region
-        juce::Path path;
-
-        // Top edge (left to right)
-        path.startNewSubPath(points[start].x, points[start].yMin);
-        for (size_t j = start + 1; j < drawEnd; ++j)
-            path.lineTo(points[j].x, points[j].yMin);
-
-        // Bottom edge (right to left)
-        for (size_t j = drawEnd; j > start; --j)
-            path.lineTo(points[j - 1].x, points[j - 1].yMax);
-
-        path.closeSubPath();
-
-        auto colour = juce::Colour(currentBoost ? colBoost : colCut);
-        g.setColour(colour);
-        g.fillPath(path);
-
-        // Stroke the path to ensure visibility when shape is thin horizontally
-        g.strokePath(path, juce::PathStrokeType(1.0f));
-    }
+    g.setColour(juce::Colour(colCut));
+    g.fillPath(path);
+    g.strokePath(path, juce::PathStrokeType(1.0f));
 }
 
 float SpectrumAnalyzer::frequencyToX(float freq) const
