@@ -1,260 +1,248 @@
 #include "PluginEditor.h"
 
 //==============================================================================
-// Custom cell components
+// Custom cell components for ChannelSummaryTable
 //==============================================================================
 
-class SliderCell : public juce::Component
+// Import button OR filename with clear button
+class ImportCell : public juce::Component
 {
 public:
-    SliderCell(juce::AudioProcessorValueTreeState& apvts, const juce::String& paramID, int textBoxWidth)
+    ImportCell(RoomMultiEQAudioProcessor& p, int channel, ChannelSummaryTable& table)
+        : processor(p), channelIndex(channel), parentTable(table)
     {
-        slider.setSliderStyle(juce::Slider::LinearBar);
-        slider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, textBoxWidth, 20);
-        slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
-        addAndMakeVisible(slider);
+        importButton.setButtonText("Import");
+        importButton.onClick = [this]() { importFile(); };
+        addAndMakeVisible(importButton);
 
-        attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-            apvts, paramID, slider);
+        clearButton.setButtonText(juce::CharPointer_UTF8("\xc3\x97"));  // × symbol
+        clearButton.onClick = [this]() { clearChannel(); };
+        addChildComponent(clearButton);
+
+        filenameLabel.setJustificationType(juce::Justification::centredLeft);
+        filenameLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+        addChildComponent(filenameLabel);
+
+        updateDisplay();
     }
 
-    void resized() override { slider.setBounds(getLocalBounds()); }
-
-private:
-    juce::Slider slider;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
-};
-
-class TypeComboCell : public juce::Component
-{
-public:
-    TypeComboCell(juce::AudioProcessorValueTreeState& apvts, const juce::String& paramID)
+    void updateDisplay()
     {
-        combo.addItem("PK", 1);
-        combo.addItem("LS", 2);
-        combo.addItem("HS", 3);
-        addAndMakeVisible(combo);
+        auto filename = processor.getLoadedFilename(channelIndex);
+        bool hasFilter = filename.isNotEmpty();
 
-        attachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
-            apvts, paramID, combo);
-    }
+        importButton.setVisible(!hasFilter);
+        filenameLabel.setVisible(hasFilter);
+        clearButton.setVisible(hasFilter);
 
-    void resized() override { combo.setBounds(getLocalBounds()); }
-
-private:
-    juce::ComboBox combo;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attachment;
-};
-
-class BypassButtonCell : public juce::Component,
-                         public juce::AudioProcessorValueTreeState::Listener
-{
-public:
-    BypassButtonCell(juce::AudioProcessorValueTreeState& apvts, const juce::String& paramID)
-        : apvtsRef(apvts)
-    {
-        // Display shows filter state (ON/OFF), not bypass state
-        // Toggle ON (lit) = filter enabled = bypass false
-        button.setButtonText("");  // No text, just checkbox
-        button.setClickingTogglesState(true);
-        button.onClick = [this]() {
-            // Invert: button ON means bypass OFF (filter enabled)
-            bool filterEnabled = button.getToggleState();
-            if (auto* param = apvtsRef.getParameter(parameterID))
-                param->setValueNotifyingHost(filterEnabled ? 0.0f : 1.0f);
-        };
-        addAndMakeVisible(button);
-
-        setParameterID(paramID);
-    }
-
-    ~BypassButtonCell() override
-    {
-        if (parameterID.isNotEmpty())
-            apvtsRef.removeParameterListener(parameterID, this);
-    }
-
-    void setParameterID(const juce::String& paramID)
-    {
-        if (parameterID.isNotEmpty())
-            apvtsRef.removeParameterListener(parameterID, this);
-
-        parameterID = paramID;
-        apvtsRef.addParameterListener(parameterID, this);
-        updateButtonState();
+        if (hasFilter)
+            filenameLabel.setText(filename, juce::dontSendNotification);
     }
 
     void resized() override
     {
-        // Center the checkbox in the cell
-        auto bounds = getLocalBounds();
-        int size = juce::jmin(bounds.getWidth(), bounds.getHeight()) - 4;
-        button.setBounds(bounds.withSizeKeepingCentre(size + 12, size));  // +12 for click area
-    }
+        auto bounds = getLocalBounds().reduced(2);
 
-private:
-    void parameterChanged(const juce::String&, float) override
-    {
-        juce::MessageManager::callAsync([safeThis = juce::Component::SafePointer<BypassButtonCell>(this)]() {
-            if (safeThis != nullptr)
-                safeThis->updateButtonState();
-        });
-    }
-
-    void updateButtonState()
-    {
-        if (auto* param = apvtsRef.getRawParameterValue(parameterID))
+        if (importButton.isVisible())
         {
-            bool bypassed = *param > 0.5f;
-            button.setToggleState(!bypassed, juce::dontSendNotification);
+            importButton.setBounds(bounds);
+        }
+        else
+        {
+            clearButton.setBounds(bounds.removeFromRight(24));
+            bounds.removeFromRight(4);
+            filenameLabel.setBounds(bounds);
         }
     }
 
-    juce::String parameterID;
-    juce::AudioProcessorValueTreeState& apvtsRef;
-    juce::ToggleButton button;
+private:
+    void importFile()
+    {
+        auto chooser = std::make_shared<juce::FileChooser>(
+            "Select Filter File",
+            juce::File::getSpecialLocation(juce::File::userHomeDirectory),
+            "*.txt");
+
+        chooser->launchAsync(
+            juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+            [this, chooser](const juce::FileChooser& fc)
+            {
+                auto file = fc.getResult();
+                if (file.existsAsFile())
+                {
+                    processor.loadFilterFile(channelIndex, file);
+                    updateDisplay();
+                    parentTable.refresh();
+                }
+            });
+    }
+
+    void clearChannel()
+    {
+        processor.clearChannel(channelIndex);
+        updateDisplay();
+        parentTable.refresh();
+    }
+
+    RoomMultiEQAudioProcessor& processor;
+    int channelIndex;
+    ChannelSummaryTable& parentTable;
+
+    juce::TextButton importButton;
+    juce::TextButton clearButton;
+    juce::Label filenameLabel;
+};
+
+// Sparkline showing filter response curve
+class TableSparkline : public juce::Component,
+                       private juce::Timer
+{
+public:
+    TableSparkline(RoomMultiEQAudioProcessor& p, int channel)
+        : processor(p), channelIndex(channel)
+    {
+        startTimerHz(10);
+    }
+
+    void paint(juce::Graphics& g) override
+    {
+        auto bounds = getLocalBounds().toFloat().reduced(2);
+
+        // Draw background
+        g.setColour(juce::Colour(0xff1a1a1a));
+        g.fillRoundedRectangle(bounds, 3.0f);
+
+        double sr = processor.getCurrentSampleRate();
+        if (sr <= 0.0)
+            return;
+
+        // Check if channel has a filter loaded
+        if (processor.getLoadedFilename(channelIndex).isEmpty())
+        {
+            // Draw flat line for empty channel
+            g.setColour(juce::Colours::grey.withAlpha(0.3f));
+            float y = bounds.getCentreY();
+            g.drawHorizontalLine(static_cast<int>(y), bounds.getX() + 2, bounds.getRight() - 2);
+            return;
+        }
+
+        const auto& ch = processor.getChannel(channelIndex);
+        auto response = FilterResponseCalculator::calculateResponse(ch, sr, static_cast<int>(bounds.getWidth()));
+
+        juce::Path path;
+        const float minDB = -24.0f;
+        const float maxDB = 24.0f;
+
+        for (int i = 0; i < static_cast<int>(response.size()); ++i)
+        {
+            float x = bounds.getX() + static_cast<float>(i);
+            float db = std::clamp(response[static_cast<size_t>(i)], minDB, maxDB);
+            float y = bounds.getY() + (1.0f - (db - minDB) / (maxDB - minDB)) * bounds.getHeight();
+
+            if (i == 0)
+                path.startNewSubPath(x, y);
+            else
+                path.lineTo(x, y);
+        }
+
+        g.setColour(ChannelColors::getChannelColor(channelIndex));
+        g.strokePath(path, juce::PathStrokeType(1.5f));
+    }
+
+private:
+    void timerCallback() override { repaint(); }
+
+    RoomMultiEQAudioProcessor& processor;
+    int channelIndex;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TableSparkline)
 };
 
 //==============================================================================
-// ChannelEQComponent
+// ChannelSummaryTable
 //==============================================================================
 
-ChannelEQComponent::ChannelEQComponent(RoomMultiEQAudioProcessor& p)
-    : processor(p), channelIndex(0)
+ChannelSummaryTable::ChannelSummaryTable(RoomMultiEQAudioProcessor& p,
+                                          MultiChannelSpectrumAnalyzer& analyzer)
+    : processor(p), spectrumAnalyzer(analyzer)
 {
     table.setModel(this);
     table.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff2a2a2a));
-    table.setRowHeight(24);
+    table.setRowHeight(36);
 
     auto& header = table.getHeader();
-    header.addColumn("#", 1, 30, 30, 30);
-    header.addColumn("On", 2, 32, 32, 32);
-    header.addColumn("Type", 3, 55, 55, 70);
-    header.addColumn("Freq", 4, 85, 75, 110);
-    header.addColumn("Gain", 5, 70, 60, 90);
-    header.addColumn("Q", 6, 55, 45, 75);
+    header.addColumn("Channel", 1, 80, 60, 100);
+    header.addColumn("Filter", 2, 200, 150, 300);
+    header.addColumn("Response", 3, 150, 100, -1);  // -1 max = no limit
+    header.setStretchToFitActive(true);
 
     addAndMakeVisible(table);
-    updateVisibleBands();
 }
 
-ChannelEQComponent::~ChannelEQComponent()
+ChannelSummaryTable::~ChannelSummaryTable()
 {
 }
 
-void ChannelEQComponent::setChannelIndex(int index)
-{
-    channelIndex = index;
-    updateVisibleBands();
-}
-
-void ChannelEQComponent::paint(juce::Graphics& g)
+void ChannelSummaryTable::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colour(0xff353535));
 }
 
-void ChannelEQComponent::resized()
+void ChannelSummaryTable::resized()
 {
     table.setBounds(getLocalBounds());
 }
 
-int ChannelEQComponent::getNumRows()
+int ChannelSummaryTable::getNumRows()
 {
-    return static_cast<int>(visibleBands.size());
+    return processor.getNumChannels();
 }
 
-bool ChannelEQComponent::isBandActive(int bandIndex) const
-{
-    auto& apvts = processor.getAPVTS();
-
-    constexpr float freqDefault = 1000.0f;
-    constexpr float gainDefault = 0.0f;
-    constexpr float qDefault = 1.0f;
-
-    auto* freqParam = apvts.getParameter(RoomMultiEQAudioProcessor::getParamID(channelIndex, bandIndex, "freq"));
-    auto* gainParam = apvts.getParameter(RoomMultiEQAudioProcessor::getParamID(channelIndex, bandIndex, "gain"));
-    auto* qParam = apvts.getParameter(RoomMultiEQAudioProcessor::getParamID(channelIndex, bandIndex, "q"));
-
-    if (!freqParam || !gainParam || !qParam)
-        return true;
-
-    float freqNormDefault = freqParam->convertTo0to1(freqDefault);
-    float gainNormDefault = gainParam->convertTo0to1(gainDefault);
-    float qNormDefault = qParam->convertTo0to1(qDefault);
-
-    float freqNorm = freqParam->getValue();
-    float gainNorm = gainParam->getValue();
-    float qNorm = qParam->getValue();
-
-    if (std::abs(freqNorm - freqNormDefault) > 0.001f) return true;
-    if (std::abs(gainNorm - gainNormDefault) > 0.001f) return true;
-    if (std::abs(qNorm - qNormDefault) > 0.001f) return true;
-
-    return false;
-}
-
-int ChannelEQComponent::getBandIndexForRow(int row) const
-{
-    if (row >= 0 && row < static_cast<int>(visibleBands.size()))
-        return visibleBands[static_cast<size_t>(row)];
-    return 0;
-}
-
-void ChannelEQComponent::updateVisibleBands()
-{
-    visibleBands.clear();
-
-    for (int b = 0; b < NUM_EQ_BANDS; ++b)
-    {
-        if (isBandActive(b))
-            visibleBands.push_back(b);
-    }
-
-    table.updateContent();
-    table.repaint();
-}
-
-void ChannelEQComponent::paintRowBackground(juce::Graphics& g, int rowNumber, int width, int height, bool)
+void ChannelSummaryTable::paintRowBackground(juce::Graphics& g, int rowNumber, int width, int height, bool)
 {
     juce::ignoreUnused(width, height);
     g.fillAll(rowNumber % 2 == 0 ? juce::Colour(0xff2a2a2a) : juce::Colour(0xff323232));
 }
 
-void ChannelEQComponent::paintCell(juce::Graphics& g, int rowNumber, int columnId, int width, int height, bool)
+void ChannelSummaryTable::paintCell(juce::Graphics& g, int rowNumber, int columnId, int width, int height, bool)
 {
-    g.setColour(juce::Colours::white);
-
     if (columnId == 1)
     {
-        int bandIndex = getBandIndexForRow(rowNumber);
-        g.drawText(juce::String(bandIndex + 1), 2, 0, width - 4, height, juce::Justification::centred);
+        // Channel name with color indicator
+        g.setColour(ChannelColors::getChannelColor(rowNumber));
+        g.fillEllipse(4.0f, (height - 8.0f) / 2.0f, 8.0f, 8.0f);
+
+        g.setColour(juce::Colours::white);
+        g.drawText(processor.getChannelName(rowNumber), 16, 0, width - 20, height, juce::Justification::centredLeft);
     }
 }
 
-juce::Component* ChannelEQComponent::refreshComponentForCell(int rowNumber, int columnId, bool, juce::Component* existing)
+juce::Component* ChannelSummaryTable::refreshComponentForCell(int rowNumber, int columnId, bool, juce::Component* existing)
 {
     delete existing;
 
     if (columnId == 1)
         return nullptr;
 
-    int bandIndex = getBandIndexForRow(rowNumber);
-    auto& apvts = processor.getAPVTS();
+    if (columnId == 2)
+        return new ImportCell(processor, rowNumber, *this);
 
-    switch (columnId)
+    if (columnId == 3)
+        return new TableSparkline(processor, rowNumber);
+
+    return nullptr;
+}
+
+void ChannelSummaryTable::refresh()
+{
+    table.updateContent();
+    table.repaint();
+
+    // Update spectrum analyzer visibility based on bypass state
+    for (int i = 0; i < processor.getNumChannels(); ++i)
     {
-        case 2:
-            return new BypassButtonCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelIndex, bandIndex, "bypass"));
-        case 3:
-            return new TypeComboCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelIndex, bandIndex, "type"));
-        case 4:
-            return new SliderCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelIndex, bandIndex, "freq"), 70);
-        case 5:
-            return new SliderCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelIndex, bandIndex, "gain"), 50);
-        case 6:
-            return new SliderCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelIndex, bandIndex, "q"), 40);
-        default:
-            return nullptr;
+        bool visible = !processor.isChannelBypassed(i);
+        spectrumAnalyzer.setChannelVisible(i, visible);
     }
 }
 
@@ -264,133 +252,36 @@ juce::Component* ChannelEQComponent::refreshComponentForCell(int rowNumber, int 
 
 RoomMultiEQAudioProcessorEditor::RoomMultiEQAudioProcessorEditor(RoomMultiEQAudioProcessor& p)
     : AudioProcessorEditor(&p),
-      audioProcessor(p),
-      channelTable(p)
+      audioProcessor(p)
 {
     // Multi-channel spectrum analyzer
     spectrumAnalyzer = std::make_unique<MultiChannelSpectrumAnalyzer>(p);
     addAndMakeVisible(*spectrumAnalyzer);
     spectrumAnalyzer->startAnalysis();
 
-    // Channel selector
-    channelSelector.onChange = [this]() { onChannelSelected(); };
-    addAndMakeVisible(channelSelector);
+    // Channel summary table
+    channelTable = std::make_unique<ChannelSummaryTable>(p, *spectrumAnalyzer);
+    addAndMakeVisible(*channelTable);
 
-    // Import/Clear buttons
-    importButton.setButtonText("Import");
-    importButton.onClick = [this]() { importFilterFile(); };
-    addAndMakeVisible(importButton);
+    // Initialize visibility state
+    updateSpectrumVisibility();
 
-    clearButton.setButtonText("Clear");
-    clearButton.onClick = [this]() { clearAll(); };
-    addAndMakeVisible(clearButton);
-
-    // Channel table
-    addAndMakeVisible(channelTable);
-
-    // Initialize
-    updateChannelSelector();
-    updateVisibilityToggles();
-
-    setSize(700, 600);
+    setSize(600, 450);
     setResizable(true, true);
-    setResizeLimits(600, 500, 1200, 900);
+    setResizeLimits(500, 350, 1000, 700);
 }
 
 RoomMultiEQAudioProcessorEditor::~RoomMultiEQAudioProcessorEditor()
 {
 }
 
-void RoomMultiEQAudioProcessorEditor::updateChannelSelector()
+void RoomMultiEQAudioProcessorEditor::updateSpectrumVisibility()
 {
-    channelSelector.clear();
-    const auto& names = audioProcessor.getChannelNames();
-    int numChannels = audioProcessor.getNumChannels();
-
-    for (int i = 0; i < numChannels; ++i)
+    for (int i = 0; i < audioProcessor.getNumChannels(); ++i)
     {
-        channelSelector.addItem(names[static_cast<size_t>(i)], i + 1);
+        bool visible = !audioProcessor.isChannelBypassed(i);
+        spectrumAnalyzer->setChannelVisible(i, visible);
     }
-
-    if (numChannels > 0)
-        channelSelector.setSelectedId(1);
-}
-
-void RoomMultiEQAudioProcessorEditor::onChannelSelected()
-{
-    int selectedId = channelSelector.getSelectedId();
-    if (selectedId > 0)
-    {
-        channelTable.setChannelIndex(selectedId - 1);
-    }
-}
-
-void RoomMultiEQAudioProcessorEditor::updateVisibilityToggles()
-{
-    // Clear existing toggles and sparklines
-    for (auto& toggle : visibilityToggles)
-        removeChildComponent(toggle.get());
-    visibilityToggles.clear();
-
-    for (auto& sparkline : sparklines)
-        removeChildComponent(sparkline.get());
-    sparklines.clear();
-
-    int numChannels = audioProcessor.getNumChannels();
-    const auto& names = audioProcessor.getChannelNames();
-
-    for (int i = 0; i < numChannels; ++i)
-    {
-        auto toggle = std::make_unique<juce::ToggleButton>(names[static_cast<size_t>(i)]);
-        toggle->setToggleState(true, juce::dontSendNotification);
-        toggle->setColour(juce::ToggleButton::textColourId, ChannelColors::getChannelColor(i));
-        toggle->setColour(juce::ToggleButton::tickColourId, ChannelColors::getChannelColor(i));
-
-        int channelIndex = i;
-        toggle->onClick = [this, channelIndex]()
-        {
-            bool visible = visibilityToggles[static_cast<size_t>(channelIndex)]->getToggleState();
-            spectrumAnalyzer->setChannelVisible(channelIndex, visible);
-        };
-
-        addAndMakeVisible(*toggle);
-        visibilityToggles.push_back(std::move(toggle));
-
-        // Add sparkline for this channel
-        auto sparkline = std::make_unique<FilterSparkline>(audioProcessor, i);
-        addAndMakeVisible(*sparkline);
-        sparklines.push_back(std::move(sparkline));
-    }
-
-    resized();
-}
-
-void RoomMultiEQAudioProcessorEditor::importFilterFile()
-{
-    auto chooser = std::make_shared<juce::FileChooser>(
-        "Select Filter File",
-        juce::File::getSpecialLocation(juce::File::userHomeDirectory),
-        "*.txt");
-
-    chooser->launchAsync(
-        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-        [this, chooser](const juce::FileChooser& fc)
-        {
-            auto file = fc.getResult();
-            if (file.existsAsFile())
-            {
-                audioProcessor.loadFilterFile(channelTable.getChannelIndex(), file);
-                channelTable.updateVisibleBands();
-            }
-        });
-}
-
-void RoomMultiEQAudioProcessorEditor::clearAll()
-{
-    int ch = channelTable.getChannelIndex();
-    for (int b = 0; b < NUM_EQ_BANDS; ++b)
-        audioProcessor.resetBandToDefaults(ch, b);
-    channelTable.updateVisibleBands();
 }
 
 void RoomMultiEQAudioProcessorEditor::paint(juce::Graphics& g)
@@ -399,7 +290,7 @@ void RoomMultiEQAudioProcessorEditor::paint(juce::Graphics& g)
 
     g.setColour(juce::Colours::white);
     g.setFont(juce::FontOptions(20.0f).withStyle("Bold"));
-    g.drawText("Room Multi EQ", 10, 5, getWidth() - 150, 35, juce::Justification::centredLeft);
+    g.drawText("Room Multi EQ", 10, 5, getWidth() - 20, 35, juce::Justification::centredLeft);
 }
 
 void RoomMultiEQAudioProcessorEditor::resized()
@@ -409,31 +300,13 @@ void RoomMultiEQAudioProcessorEditor::resized()
     // Header
     bounds.removeFromTop(45);
 
-    // Spectrum analyzer (40% of remaining height)
-    int spectrumHeight = static_cast<int>(bounds.getHeight() * 0.4f);
+    // Spectrum analyzer (60% of remaining height)
+    int spectrumHeight = static_cast<int>(bounds.getHeight() * 0.6f);
     spectrumAnalyzer->setBounds(bounds.removeFromTop(spectrumHeight));
 
-    // Visibility toggles row with sparklines
-    auto toggleArea = bounds.removeFromTop(30);
-    toggleArea.removeFromLeft(10);
-    for (size_t i = 0; i < visibilityToggles.size(); ++i)
-    {
-        visibilityToggles[i]->setBounds(toggleArea.removeFromLeft(40));
-        if (i < sparklines.size())
-        {
-            sparklines[i]->setBounds(toggleArea.removeFromLeft(50).reduced(2, 4));
-        }
-        toggleArea.removeFromLeft(5);  // Gap between channels
-    }
+    // Gap
+    bounds.removeFromTop(10);
 
-    // Channel selector row
-    auto selectorArea = bounds.removeFromTop(35);
-    selectorArea.removeFromLeft(10);
-    channelSelector.setBounds(selectorArea.removeFromLeft(150).reduced(2));
-    importButton.setBounds(selectorArea.removeFromLeft(80).reduced(2));
-    clearButton.setBounds(selectorArea.removeFromLeft(80).reduced(2));
-
-    // Table
-    bounds.removeFromTop(5);
-    channelTable.setBounds(bounds.reduced(10, 0));
+    // Channel table (remaining space)
+    channelTable->setBounds(bounds.reduced(10, 0));
 }

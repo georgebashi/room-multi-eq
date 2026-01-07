@@ -73,6 +73,14 @@ public:
 
     void loadFilterFile(int channelIndex, const juce::File& file);
     void resetBandToDefaults(int channelIndex, int band);
+    void clearChannel(int channelIndex);
+    juce::String getLoadedFilename(int channelIndex) const;
+    bool isChannelBypassed(int channelIndex) const;
+
+    static juce::String getChannelBypassParamID(int channelIndex)
+    {
+        return "ch" + juce::String(channelIndex) + "_bypass";
+    }
 
     // Parameter ID generation - new format: ch{0-23}_band_{1-16}_{param}
     static juce::String getParamID(int channelIndex, int band, const juce::String& param)
@@ -90,6 +98,7 @@ private:
     std::vector<std::unique_ptr<ChannelEQ>> channels;
     std::vector<std::unique_ptr<SpectrumDataCollector>> spectrumCollectors;
     std::vector<juce::String> channelNames;
+    std::vector<juce::String> loadedFilenames;
     int numChannels = 0;
     double currentSampleRate = 44100.0;
     mutable std::atomic<double> lastProcessTime { 0.0 };

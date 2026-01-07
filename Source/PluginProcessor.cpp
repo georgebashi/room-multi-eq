@@ -82,6 +82,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout RoomMultiEQAudioProcessor::c
         }
     }
 
+    // Per-channel bypass parameters
+    for (int ch = 0; ch < MAX_CHANNELS; ++ch)
+    {
+        layout.add(std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID(getChannelBypassParamID(ch), 1),
+            "Ch " + juce::String(ch + 1) + " Bypass",
+            true));  // Default bypassed (no filter loaded)
+    }
+
     return layout;
 }
 
@@ -96,6 +105,7 @@ void RoomMultiEQAudioProcessor::initializeChannels(int count, const juce::AudioC
 
     // Get channel names from JUCE
     channelNames.clear();
+    loadedFilenames.resize(static_cast<size_t>(count));
     for (int i = 0; i < count; ++i)
     {
         auto channelType = channelSet.getTypeOfChannel(i);
@@ -276,8 +286,13 @@ void RoomMultiEQAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         {
             float* channelData = buffer.getWritePointer(ch);
 
+            bool bypassed = isChannelBypassed(ch);
+
             spectrumCollectors[static_cast<size_t>(ch)]->pushInputSample(channelData[i]);
-            channels[static_cast<size_t>(ch)]->processSample(channelData[i]);
+
+            if (!bypassed)
+                channels[static_cast<size_t>(ch)]->processSample(channelData[i]);
+
             spectrumCollectors[static_cast<size_t>(ch)]->pushOutputSample(channelData[i]);
         }
     }
@@ -296,6 +311,15 @@ juce::AudioProcessorEditor* RoomMultiEQAudioProcessor::createEditor()
 void RoomMultiEQAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
+
+    // Store loaded filenames
+    for (int ch = 0; ch < MAX_CHANNELS; ++ch)
+    {
+        juce::String filename = ch < static_cast<int>(loadedFilenames.size())
+            ? loadedFilenames[static_cast<size_t>(ch)] : "";
+        state.setProperty("filename_ch" + juce::String(ch), filename, nullptr);
+    }
+
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
@@ -306,7 +330,17 @@ void RoomMultiEQAudioProcessor::setStateInformation(const void* data, int sizeIn
 
     if (xmlState != nullptr && xmlState->hasTagName(apvts.state.getType()))
     {
-        apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
+        auto state = juce::ValueTree::fromXml(*xmlState);
+        apvts.replaceState(state);
+
+        // Restore loaded filenames
+        loadedFilenames.resize(static_cast<size_t>(MAX_CHANNELS));
+        for (int ch = 0; ch < MAX_CHANNELS; ++ch)
+        {
+            juce::String propName = "filename_ch" + juce::String(ch);
+            if (state.hasProperty(propName))
+                loadedFilenames[static_cast<size_t>(ch)] = state.getProperty(propName).toString();
+        }
 
         // Update all bands from restored state
         for (int ch = 0; ch < numChannels; ++ch)
@@ -331,6 +365,32 @@ void RoomMultiEQAudioProcessor::resetBandToDefaults(int channelIndex, int band)
         param->setValueNotifyingHost(0.0f);
     if (auto* param = apvts.getParameter(getParamID(channelIndex, band, "bypass")))
         param->setValueNotifyingHost(1.0f);
+}
+
+void RoomMultiEQAudioProcessor::clearChannel(int channelIndex)
+{
+    for (int b = 0; b < NUM_EQ_BANDS; ++b)
+        resetBandToDefaults(channelIndex, b);
+
+    loadedFilenames[static_cast<size_t>(channelIndex)] = "";
+
+    // Set channel to bypassed
+    if (auto* param = apvts.getParameter(getChannelBypassParamID(channelIndex)))
+        param->setValueNotifyingHost(1.0f);
+}
+
+juce::String RoomMultiEQAudioProcessor::getLoadedFilename(int channelIndex) const
+{
+    if (channelIndex >= 0 && channelIndex < static_cast<int>(loadedFilenames.size()))
+        return loadedFilenames[static_cast<size_t>(channelIndex)];
+    return "";
+}
+
+bool RoomMultiEQAudioProcessor::isChannelBypassed(int channelIndex) const
+{
+    if (auto* param = apvts.getRawParameterValue(getChannelBypassParamID(channelIndex)))
+        return *param > 0.5f;
+    return true;
 }
 
 void RoomMultiEQAudioProcessor::loadFilterFile(int channelIndex, const juce::File& file)
@@ -361,6 +421,12 @@ void RoomMultiEQAudioProcessor::loadFilterFile(int channelIndex, const juce::Fil
         if (auto* param = apvts.getParameter(getParamID(channelIndex, b, "bypass")))
             param->setValueNotifyingHost(f.enabled ? 0.0f : 1.0f);
     }
+
+    // Store filename and enable channel
+    loadedFilenames[static_cast<size_t>(channelIndex)] = file.getFileName();
+
+    if (auto* param = apvts.getParameter(getChannelBypassParamID(channelIndex)))
+        param->setValueNotifyingHost(0.0f);  // Enable (not bypassed)
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
