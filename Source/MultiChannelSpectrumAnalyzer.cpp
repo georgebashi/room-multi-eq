@@ -59,6 +59,11 @@ void MultiChannelSpectrumAnalyzer::timerCallback()
         return;
     }
 
+    // Track the signal range across all visible channels
+    float signalPeak = -200.0f;
+    float signalFloor = 200.0f;
+    bool hasSignal = false;
+
     int numChannels = processor.getNumChannels();
     for (int ch = 0; ch < numChannels; ++ch)
     {
@@ -71,10 +76,71 @@ void MultiChannelSpectrumAnalyzer::timerCallback()
         auto& smoothedIn = smoothedInputs[static_cast<size_t>(ch)];
         auto& smoothedOut = smoothedOutputs[static_cast<size_t>(ch)];
 
+        // Collect all signal values to find the range
+        std::vector<float> signalValues;
+        signalValues.reserve(smoothedIn.size() * 2);
+
         for (size_t i = 0; i < smoothedIn.size() && i < inputSpectrum.size(); ++i)
         {
             smoothedIn[i] = smoothingFactor * smoothedIn[i] + (1.0f - smoothingFactor) * inputSpectrum[i];
             smoothedOut[i] = smoothingFactor * smoothedOut[i] + (1.0f - smoothingFactor) * outputSpectrum[i];
+
+            // Only consider bins with meaningful signal (above noise floor)
+            if (smoothedIn[i] > absoluteMinDB)
+                signalValues.push_back(smoothedIn[i]);
+            if (smoothedOut[i] > absoluteMinDB)
+                signalValues.push_back(smoothedOut[i]);
+        }
+
+        if (!signalValues.empty())
+        {
+            hasSignal = true;
+            std::sort(signalValues.begin(), signalValues.end());
+
+            // Use 95th percentile for peak (ignore occasional spikes)
+            size_t peakIdx = static_cast<size_t>(static_cast<float>(signalValues.size()) * 0.95f);
+            peakIdx = std::min(peakIdx, signalValues.size() - 1);
+            signalPeak = std::max(signalPeak, signalValues[peakIdx]);
+
+            // Use 5th percentile for floor (ignore noise floor)
+            size_t floorIdx = static_cast<size_t>(static_cast<float>(signalValues.size()) * 0.05f);
+            signalFloor = std::min(signalFloor, signalValues[floorIdx]);
+        }
+    }
+
+    // Update dynamic range
+    float decayPerFrame = rangeDecayRate / 30.0f;
+
+    if (hasSignal)
+    {
+        // Target ceiling is above the signal peak with margin
+        float targetMax = signalPeak + rangeMargin;
+        targetMax = std::min(targetMax, absoluteMaxDB);
+
+        if (targetMax > currentMaxDB)
+        {
+            // Expand ceiling instantly
+            currentMaxDB = targetMax;
+        }
+        else
+        {
+            // Contract ceiling slowly
+            currentMaxDB = std::max(currentMaxDB - decayPerFrame, std::max(targetMax, defaultMaxDB));
+        }
+
+        // Target floor is below the signal floor with margin
+        float targetMin = signalFloor - rangeMargin;
+        targetMin = std::max(targetMin, absoluteMinDB);
+
+        if (targetMin < currentMinDB)
+        {
+            // Expand floor instantly
+            currentMinDB = targetMin;
+        }
+        else
+        {
+            // Contract floor slowly
+            currentMinDB = std::min(currentMinDB + decayPerFrame, std::min(targetMin, defaultMinDB));
         }
     }
 
@@ -90,16 +156,6 @@ void MultiChannelSpectrumAnalyzer::paint(juce::Graphics& g)
     updateAccumulationBuffer();
     if (accumulationBuffer.isValid())
         g.drawImageAt(accumulationBuffer, 0, 0);
-
-    // Draw filter curves for all visible channels (on top of spectrum)
-    int numChannels = processor.getNumChannels();
-    for (int ch = 0; ch < numChannels; ++ch)
-    {
-        if (channelVisibility[static_cast<size_t>(ch)])
-        {
-            drawFilterCurve(g, ch);
-        }
-    }
 }
 
 void MultiChannelSpectrumAnalyzer::resized()
@@ -193,12 +249,17 @@ void MultiChannelSpectrumAnalyzer::drawGrid(juce::Graphics& g)
         g.drawVerticalLine(static_cast<int>(x), bounds.getY(), bounds.getBottom());
     }
 
-    // Horizontal lines at dB intervals
-    const float dbs[] = {-60.0f, -48.0f, -36.0f, -24.0f, -12.0f, 0.0f, 12.0f};
-    for (float db : dbs)
+    // Horizontal lines at 12dB intervals, dynamically based on current range
+    // Round currentMinDB down to nearest 12dB for clean grid lines
+    float gridFloor = std::floor(currentMinDB / 12.0f) * 12.0f;
+    float gridCeil = std::ceil(currentMaxDB / 12.0f) * 12.0f;
+    for (float db = gridFloor; db <= gridCeil; db += 12.0f)
     {
         float y = bounds.getY() + dbToY(db) * bounds.getHeight();
-        g.drawHorizontalLine(static_cast<int>(y), bounds.getX(), bounds.getRight());
+        if (y >= bounds.getY() && y <= bounds.getBottom())
+        {
+            g.drawHorizontalLine(static_cast<int>(y), bounds.getX(), bounds.getRight());
+        }
     }
 
     // Labels
@@ -212,12 +273,19 @@ void MultiChannelSpectrumAnalyzer::drawGrid(juce::Graphics& g)
         g.drawText(freqLabels[i], static_cast<int>(x) - 15, static_cast<int>(bounds.getBottom()) + 2, 30, 16, juce::Justification::centred);
     }
 
-    const char* dbLabels[] = {"-60", "-48", "-36", "-24", "-12", "0", "+12"};
-    const float dbValues[] = {-60.0f, -48.0f, -36.0f, -24.0f, -12.0f, 0.0f, 12.0f};
-    for (int i = 0; i < 7; ++i)
+    // dB labels - show at 12dB intervals within visible range
+    for (float db = gridFloor; db <= gridCeil; db += 12.0f)
     {
-        float y = bounds.getY() + dbToY(dbValues[i]) * bounds.getHeight();
-        g.drawText(dbLabels[i], 2, static_cast<int>(y) - 8, 25, 16, juce::Justification::right);
+        float y = bounds.getY() + dbToY(db) * bounds.getHeight();
+        if (y >= bounds.getY() && y <= bounds.getBottom())
+        {
+            juce::String label;
+            if (db > 0)
+                label = "+" + juce::String(static_cast<int>(db));
+            else
+                label = juce::String(static_cast<int>(db));
+            g.drawText(label, 2, static_cast<int>(y) - 8, 25, 16, juce::Justification::right);
+        }
     }
 }
 
@@ -291,11 +359,11 @@ void MultiChannelSpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g, int
         float freq = std::pow(10.0f, logMin + t * (logMax - logMin));
         float x = bounds.getX() + t * bounds.getWidth();
 
-        float inputDB = std::clamp(interpolateSpectrum(smoothedInput, freq), minDB - 20.0f, maxDB);
-        float outputDB = std::clamp(interpolateSpectrum(smoothedOutput, freq), minDB - 20.0f, maxDB);
+        float inputDB = std::clamp(interpolateSpectrum(smoothedInput, freq), currentMinDB - 20.0f, currentMaxDB);
+        float outputDB = std::clamp(interpolateSpectrum(smoothedOutput, freq), currentMinDB - 20.0f, currentMaxDB);
 
         // Track data range (where we have signal above the floor)
-        bool hasSignal = (inputDB > minDB || outputDB > minDB);
+        bool hasSignal = (inputDB > currentMinDB || outputDB > currentMinDB);
         if (hasSignal)
         {
             if (!seenData)
@@ -375,7 +443,7 @@ void MultiChannelSpectrumAnalyzer::drawFilterCurve(juce::Graphics& g, int channe
     {
         float t = static_cast<float>(i) / 199.0f;
         float x = bounds.getX() + t * bounds.getWidth();
-        float db = std::clamp(response[static_cast<size_t>(i)], minDB, maxDB);
+        float db = std::clamp(response[static_cast<size_t>(i)], currentMinDB, currentMaxDB);
         float y = bounds.getY() + dbToY(db) * bounds.getHeight();
 
         if (i == 0)
@@ -398,5 +466,5 @@ float MultiChannelSpectrumAnalyzer::frequencyToX(float freq) const
 
 float MultiChannelSpectrumAnalyzer::dbToY(float db) const
 {
-    return 1.0f - (db - minDB) / (maxDB - minDB);
+    return 1.0f - (db - currentMinDB) / (currentMaxDB - currentMinDB);
 }

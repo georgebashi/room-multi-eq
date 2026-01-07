@@ -334,10 +334,14 @@ void RoomMultiEQAudioProcessorEditor::onChannelSelected()
 
 void RoomMultiEQAudioProcessorEditor::updateVisibilityToggles()
 {
-    // Clear existing toggles
+    // Clear existing toggles and sparklines
     for (auto& toggle : visibilityToggles)
         removeChildComponent(toggle.get());
     visibilityToggles.clear();
+
+    for (auto& sparkline : sparklines)
+        removeChildComponent(sparkline.get());
+    sparklines.clear();
 
     int numChannels = audioProcessor.getNumChannels();
     const auto& names = audioProcessor.getChannelNames();
@@ -358,6 +362,11 @@ void RoomMultiEQAudioProcessorEditor::updateVisibilityToggles()
 
         addAndMakeVisible(*toggle);
         visibilityToggles.push_back(std::move(toggle));
+
+        // Add sparkline for this channel
+        auto sparkline = std::make_unique<FilterSparkline>(audioProcessor, i);
+        addAndMakeVisible(*sparkline);
+        sparklines.push_back(std::move(sparkline));
     }
 
     resized();
@@ -413,12 +422,17 @@ void RoomMultiEQAudioProcessorEditor::resized()
     int spectrumHeight = static_cast<int>(bounds.getHeight() * 0.4f);
     spectrumAnalyzer->setBounds(bounds.removeFromTop(spectrumHeight));
 
-    // Visibility toggles row
+    // Visibility toggles row with sparklines
     auto toggleArea = bounds.removeFromTop(30);
     toggleArea.removeFromLeft(10);
-    for (auto& toggle : visibilityToggles)
+    for (size_t i = 0; i < visibilityToggles.size(); ++i)
     {
-        toggle->setBounds(toggleArea.removeFromLeft(50));
+        visibilityToggles[i]->setBounds(toggleArea.removeFromLeft(40));
+        if (i < sparklines.size())
+        {
+            sparklines[i]->setBounds(toggleArea.removeFromLeft(50).reduced(2, 4));
+        }
+        toggleArea.removeFromLeft(5);  // Gap between channels
     }
 
     // Channel selector row
