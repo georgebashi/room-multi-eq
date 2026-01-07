@@ -47,7 +47,7 @@ private:
     // Display range
     static constexpr float minFreq = 20.0f;
     static constexpr float maxFreq = 20000.0f;
-    static constexpr float minDB = -24.0f;
+    static constexpr float minDB = -60.0f;
     static constexpr float maxDB = 12.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MultiChannelSpectrumAnalyzer)

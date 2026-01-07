@@ -88,7 +88,7 @@ void MultiChannelSpectrumAnalyzer::drawGrid(juce::Graphics& g)
     }
 
     // Horizontal lines at dB intervals
-    const float dbs[] = {-24.0f, -18.0f, -12.0f, -6.0f, 0.0f, 6.0f, 12.0f};
+    const float dbs[] = {-60.0f, -48.0f, -36.0f, -24.0f, -12.0f, 0.0f, 12.0f};
     for (float db : dbs)
     {
         float y = bounds.getY() + dbToY(db) * bounds.getHeight();
@@ -106,9 +106,9 @@ void MultiChannelSpectrumAnalyzer::drawGrid(juce::Graphics& g)
         g.drawText(freqLabels[i], static_cast<int>(x) - 15, static_cast<int>(bounds.getBottom()) + 2, 30, 16, juce::Justification::centred);
     }
 
-    const char* dbLabels[] = {"-24", "-12", "0", "+12"};
-    const float dbValues[] = {-24.0f, -12.0f, 0.0f, 12.0f};
-    for (int i = 0; i < 4; ++i)
+    const char* dbLabels[] = {"-60", "-48", "-36", "-24", "-12", "0", "+12"};
+    const float dbValues[] = {-60.0f, -48.0f, -36.0f, -24.0f, -12.0f, 0.0f, 12.0f};
+    for (int i = 0; i < 7; ++i)
     {
         float y = bounds.getY() + dbToY(dbValues[i]) * bounds.getHeight();
         g.drawText(dbLabels[i], 2, static_cast<int>(y) - 8, 25, 16, juce::Justification::right);
