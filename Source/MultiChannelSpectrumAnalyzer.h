@@ -5,6 +5,7 @@
 #include <juce_graphics/juce_graphics.h>
 #include "ChannelEQ.h"
 #include "ChannelColors.h"
+#include "SpectrumDataCollector.h"
 #include <vector>
 
 class RoomMultiEQAudioProcessor;
@@ -33,11 +34,22 @@ private:
     void drawGrid(juce::Graphics& g);
     void drawFilterCurve(juce::Graphics& g, int channelIndex);
 
+    // Motion blur accumulation buffer
+    void updateAccumulationBuffer();
+    void drawDifferenceSpectrum(juce::Graphics& g, int channelIndex);
+
     float frequencyToX(float freq) const;
     float dbToY(float db) const;
 
     RoomMultiEQAudioProcessor& processor;
     std::vector<bool> channelVisibility;
+
+    // Smoothed spectrum data per channel (input and output)
+    std::vector<std::vector<float>> smoothedInputs;
+    std::vector<std::vector<float>> smoothedOutputs;
+
+    // Frame accumulation buffer for motion blur effect
+    juce::Image accumulationBuffer;
 
     // Dracula theme colors
     static constexpr juce::uint32 colBackground = 0xff282a36;
@@ -49,6 +61,12 @@ private:
     static constexpr float maxFreq = 20000.0f;
     static constexpr float minDB = -60.0f;
     static constexpr float maxDB = 12.0f;
+
+    // Smoothing factor (0 = no smoothing, 1 = infinite smoothing)
+    static constexpr float smoothingFactor = 0.7f;
+
+    // Frame accumulation fade (0 = no trail, 1 = infinite trail)
+    static constexpr float trailFade = 0.75f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MultiChannelSpectrumAnalyzer)
 };
