@@ -92,10 +92,27 @@ void MultiChannelSpectrumAnalyzer::paint(juce::Graphics& g)
 {
     drawBackground(g);
 
-    // Draw accumulated spectrum with motion blur
-    updateAccumulationBuffer();
+    auto bounds = getLocalBounds();
+    if (bounds.isEmpty())
+        return;
+
+    // Create composite of current frame with additive blending between channels
+    juce::Image currentFrame;
+    if (!processor.isAudioStopped())
+    {
+        currentFrame = createAdditiveComposite(bounds);
+    }
+
+    // Update accumulation buffer (blur/fade existing, add current frame at 60%)
+    updateAccumulationBuffer(currentFrame);
+
+    // Draw trails (accumulation buffer)
     if (accumulationBuffer.isValid())
         g.drawImageAt(accumulationBuffer, 0, 0);
+
+    // Draw current frame at full opacity on top (crisp, no blur)
+    if (currentFrame.isValid())
+        g.drawImageAt(currentFrame, 0, 0);
 }
 
 void MultiChannelSpectrumAnalyzer::resized()
@@ -104,7 +121,54 @@ void MultiChannelSpectrumAnalyzer::resized()
     accumulationBuffer = juce::Image();
 }
 
-void MultiChannelSpectrumAnalyzer::updateAccumulationBuffer()
+juce::Image MultiChannelSpectrumAnalyzer::createAdditiveComposite(const juce::Rectangle<int>& bounds)
+{
+    juce::Image compositeLayer(juce::Image::ARGB, bounds.getWidth(), bounds.getHeight(), true);
+    juce::Image channelLayer(juce::Image::ARGB, bounds.getWidth(), bounds.getHeight(), true);
+
+    int numChannels = processor.getNumChannels();
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        if (channelVisibility[static_cast<size_t>(ch)])
+        {
+            // Draw channel to temporary layer
+            channelLayer.clear(channelLayer.getBounds());
+            juce::Graphics layerG(channelLayer);
+            drawDifferenceSpectrum(layerG, ch);
+
+            // Additively blend this channel onto the composite
+            juce::Image::BitmapData srcData(channelLayer, juce::Image::BitmapData::readOnly);
+            juce::Image::BitmapData dstData(compositeLayer, juce::Image::BitmapData::readWrite);
+
+            for (int y = 0; y < bounds.getHeight(); ++y)
+            {
+                for (int x = 0; x < bounds.getWidth(); ++x)
+                {
+                    auto src = srcData.getPixelColour(x, y);
+                    if (src.getAlpha() == 0) continue;
+
+                    auto dst = dstData.getPixelColour(x, y);
+
+                    // Additive blend: add RGB components, clamp to 255
+                    int r = std::min(255, dst.getRed() + src.getRed());
+                    int g = std::min(255, dst.getGreen() + src.getGreen());
+                    int b = std::min(255, dst.getBlue() + src.getBlue());
+                    int a = std::max(dst.getAlpha(), src.getAlpha());
+
+                    dstData.setPixelColour(x, y, juce::Colour(
+                        static_cast<juce::uint8>(r),
+                        static_cast<juce::uint8>(g),
+                        static_cast<juce::uint8>(b),
+                        static_cast<juce::uint8>(a)));
+                }
+            }
+        }
+    }
+
+    return compositeLayer;
+}
+
+void MultiChannelSpectrumAnalyzer::updateAccumulationBuffer(const juce::Image& currentFrame)
 {
     auto bounds = getLocalBounds();
     if (bounds.isEmpty())
@@ -141,57 +205,12 @@ void MultiChannelSpectrumAnalyzer::updateAccumulationBuffer()
         }
     }
 
-    // Draw new spectrum frame onto buffer
-    // Skip drawing when audio stopped - the blur/fade above will naturally fade out the display
-    if (!processor.isAudioStopped())
+    // Add current frame to accumulation buffer at reduced opacity
+    if (currentFrame.isValid())
     {
-        // First, additively blend all visible channels together into a composite layer
-        juce::Image compositeLayer(juce::Image::ARGB, bounds.getWidth(), bounds.getHeight(), true);
-        juce::Image channelLayer(juce::Image::ARGB, bounds.getWidth(), bounds.getHeight(), true);
-
-        int numChannels = processor.getNumChannels();
-        for (int ch = 0; ch < numChannels; ++ch)
-        {
-            if (channelVisibility[static_cast<size_t>(ch)])
-            {
-                // Draw channel to temporary layer
-                channelLayer.clear(channelLayer.getBounds());
-                juce::Graphics layerG(channelLayer);
-                drawDifferenceSpectrum(layerG, ch);
-
-                // Additively blend this channel onto the composite
-                juce::Image::BitmapData srcData(channelLayer, juce::Image::BitmapData::readOnly);
-                juce::Image::BitmapData dstData(compositeLayer, juce::Image::BitmapData::readWrite);
-
-                for (int y = 0; y < bounds.getHeight(); ++y)
-                {
-                    for (int x = 0; x < bounds.getWidth(); ++x)
-                    {
-                        auto src = srcData.getPixelColour(x, y);
-                        if (src.getAlpha() == 0) continue;
-
-                        auto dst = dstData.getPixelColour(x, y);
-
-                        // Additive blend: add RGB components, clamp to 255
-                        int r = std::min(255, dst.getRed() + src.getRed());
-                        int g = std::min(255, dst.getGreen() + src.getGreen());
-                        int b = std::min(255, dst.getBlue() + src.getBlue());
-                        int a = std::max(dst.getAlpha(), src.getAlpha());
-
-                        dstData.setPixelColour(x, y, juce::Colour(
-                            static_cast<juce::uint8>(r),
-                            static_cast<juce::uint8>(g),
-                            static_cast<juce::uint8>(b),
-                            static_cast<juce::uint8>(a)));
-                    }
-                }
-            }
-        }
-
-        // Now draw the composite onto the accumulation buffer with some transparency
         juce::Graphics bufferG(accumulationBuffer);
-        bufferG.setOpacity(0.6f);
-        bufferG.drawImageAt(compositeLayer, 0, 0);
+        bufferG.setOpacity(0.3f);
+        bufferG.drawImageAt(currentFrame, 0, 0);
     }
 }
 
@@ -301,7 +320,7 @@ void MultiChannelSpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g, int
         float yMax = std::max(yInput, yOutput);
 
         // Ensure minimum thickness
-        const float minLineThickness = 0.5f;
+        const float minLineThickness = 2.0f;
         if (yMax - yMin < minLineThickness)
         {
             float center = (yMin + yMax) / 2.0f;
