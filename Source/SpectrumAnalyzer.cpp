@@ -101,24 +101,38 @@ void SpectrumAnalyzer::updateAccumulationBuffer()
         juce::Image blurred(juce::Image::ARGB, bounds.getWidth(), bounds.getHeight(), true);
         juce::Graphics blurG(blurred);
 
-        // Draw blurred version: center + offset copies
-        // Center copy (stronger weight)
-        blurG.setOpacity(trailFade * 0.5f);
+        // Gaussian-ish blur kernel: center + two rings of offset copies
+        // Total weight should be ~trailFade to control fade rate
+        const float centerWeight = trailFade * 0.4f;
+        const float innerWeight = trailFade * 0.1f;   // 4 copies
+        const float outerWeight = trailFade * 0.025f; // 4 copies
+
+        // Center
+        blurG.setOpacity(centerWeight);
         blurG.drawImageAt(accumulationBuffer, 0, 0);
 
-        // Offset copies (spread the blur)
-        blurG.setOpacity(trailFade * 0.125f);
+        // Inner ring (1px)
+        blurG.setOpacity(innerWeight);
         blurG.drawImageAt(accumulationBuffer, -1, 0);
         blurG.drawImageAt(accumulationBuffer, 1, 0);
         blurG.drawImageAt(accumulationBuffer, 0, -1);
         blurG.drawImageAt(accumulationBuffer, 0, 1);
 
+        // Outer ring (2px)
+        blurG.setOpacity(outerWeight);
+        blurG.drawImageAt(accumulationBuffer, -2, 0);
+        blurG.drawImageAt(accumulationBuffer, 2, 0);
+        blurG.drawImageAt(accumulationBuffer, 0, -2);
+        blurG.drawImageAt(accumulationBuffer, 0, 2);
+
         accumulationBuffer = std::move(blurred);
     }
 
-    // Draw new spectrum frame onto buffer (sharp, no blur)
+    // Draw new spectrum frame onto buffer with some transparency
+    // This helps it blend with the trail rather than sitting sharply on top
     {
         juce::Graphics bufferG(accumulationBuffer);
+        bufferG.setOpacity(0.7f);
         drawDifferenceSpectrum(bufferG);
     }
 }
