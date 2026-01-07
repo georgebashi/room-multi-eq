@@ -290,7 +290,6 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
 
     const float binWidth = static_cast<float>(sr) / static_cast<float>(SpectrumDataCollector::fftSize);
     const float minLineThickness = 1.0f;  // Minimum 1px line thickness
-    const float boostThresholdDB = 0.5f;  // Hysteresis to prevent flickering
 
     // We'll draw segments, each colored based on boost vs cut
     struct Point {
@@ -343,9 +342,8 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
             yMax = center + minLineThickness / 2.0f;
         }
 
-        // isBoost with hysteresis: only switch color when difference exceeds threshold
-        // This prevents flickering when input and output are nearly equal
-        bool isBoost = (outputDB - inputDB) > boostThresholdDB;
+        // isBoost: output > input means the filter is boosting at this frequency
+        bool isBoost = outputDB > inputDB;
 
         points.push_back({x, yMin, yMax, isBoost});
     }
