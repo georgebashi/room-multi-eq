@@ -8,7 +8,7 @@ std::vector<float> FilterResponseCalculator::calculateResponse(
     double sampleRate,
     int numPoints)
 {
-    std::vector<float> response(numPoints);
+    std::vector<float> response(static_cast<size_t>(numPoints));
 
     // Logarithmic frequency spacing from 20Hz to 20kHz
     const float minFreq = 20.0f;
@@ -38,7 +38,7 @@ std::vector<float> FilterResponseCalculator::calculateResponse(
                 );
             }
         }
-        response[i] = totalDB;
+        response[static_cast<size_t>(i)] = totalDB;
     }
 
     return response;

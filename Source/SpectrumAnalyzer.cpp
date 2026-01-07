@@ -252,16 +252,13 @@ void SpectrumAnalyzer::drawFilterCurve(juce::Graphics& g)
     auto response = FilterResponseCalculator::calculateResponse(channel, sr, 200);
 
     juce::Path path;
-    const float logMin = std::log10(minFreq);
-    const float logMax = std::log10(maxFreq);
 
     for (int i = 0; i < 200; ++i)
     {
         float t = static_cast<float>(i) / 199.0f;
-        float freq = std::pow(10.0f, logMin + t * (logMax - logMin));
 
         float x = bounds.getX() + t * bounds.getWidth();
-        float db = std::clamp(response[i], minDB, maxDB);
+        float db = std::clamp(response[static_cast<size_t>(i)], minDB, maxDB);
         float y = bounds.getY() + dbToY(db) * bounds.getHeight();
 
         if (i == 0)
@@ -300,7 +297,7 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
         auto getBin = [&](int idx) -> float {
             if (idx < 1) idx = 1;
             if (idx >= static_cast<int>(spectrum.size())) idx = static_cast<int>(spectrum.size()) - 1;
-            return spectrum[idx];
+            return spectrum[static_cast<size_t>(idx)];
         };
 
         float p0 = getBin(binInt - 1);
@@ -329,7 +326,7 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
         float x, yMin, yMax;
     };
     std::vector<Point> points;
-    points.reserve(numSamples);
+    points.reserve(static_cast<size_t>(numSamples));
 
     bool seenData = false;
     size_t firstDataIdx = 0;
@@ -381,7 +378,7 @@ void SpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g)
     if (lastDataIdx + 1 < points.size())
         points.resize(lastDataIdx + 1);
     if (firstDataIdx > 0)
-        points.erase(points.begin(), points.begin() + firstDataIdx);
+        points.erase(points.begin(), points.begin() + static_cast<std::ptrdiff_t>(firstDataIdx));
 
     if (points.empty())
         return;

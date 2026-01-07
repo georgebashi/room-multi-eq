@@ -10,14 +10,14 @@ SpectrumDataCollector::SpectrumDataCollector()
 
 void SpectrumDataCollector::pushInputSample(float sample)
 {
-    int idx = writeIndex.load(std::memory_order_relaxed);
+    size_t idx = static_cast<size_t>(writeIndex.load(std::memory_order_relaxed));
     inputRingBuffer[idx] = sample;
 }
 
 void SpectrumDataCollector::pushOutputSample(float sample)
 {
     int idx = writeIndex.load(std::memory_order_relaxed);
-    outputRingBuffer[idx] = sample;
+    outputRingBuffer[static_cast<size_t>(idx)] = sample;
     writeIndex.store((idx + 1) % fftSize, std::memory_order_relaxed);
 }
 
@@ -57,7 +57,7 @@ std::vector<float> SpectrumDataCollector::computeSpectrum(const std::array<float
     std::array<float, fftSize * 2> fftData{};
     for (int i = 0; i < fftSize; ++i)
     {
-        fftData[i] = ringBuffer[(readIdx + i) % fftSize];
+        fftData[static_cast<size_t>(i)] = ringBuffer[static_cast<size_t>((readIdx + i) % fftSize)];
     }
 
     // Apply window
@@ -69,14 +69,14 @@ std::vector<float> SpectrumDataCollector::computeSpectrum(const std::array<float
     // Convert to dB
     // performFrequencyOnlyForwardTransform returns magnitudes scaled by fftSize/2
     // We want 0dB to represent a full-scale sine wave, which has magnitude fftSize/2 at its bin
-    std::vector<float> spectrum(fftSize / 2);
+    std::vector<float> spectrum(static_cast<size_t>(fftSize / 2));
     const float referenceLevel = static_cast<float>(fftSize) / 2.0f;
     for (int i = 0; i < fftSize / 2; ++i)
     {
-        float magnitude = fftData[i];
+        float magnitude = fftData[static_cast<size_t>(i)];
         // Convert to dB relative to full-scale, with floor at -100dB
         float db = magnitude > 0.0f ? 20.0f * std::log10(magnitude / referenceLevel) : -100.0f;
-        spectrum[i] = db;
+        spectrum[static_cast<size_t>(i)] = db;
     }
 
     return spectrum;
@@ -129,7 +129,7 @@ void SpectrumDataCollector::applyPsychoacousticSmoothing(std::vector<float>& spe
             float weight = 1.0f - (dist / static_cast<float>(halfBins + 1));
 
             // Convert from dB to linear, average, then back to dB
-            float linear = std::pow(10.0f, spectrum[j] / 20.0f);
+            float linear = std::pow(10.0f, spectrum[static_cast<size_t>(j)] / 20.0f);
             sum += linear * weight;
             weightSum += weight;
         }
