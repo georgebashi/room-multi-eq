@@ -66,8 +66,6 @@ target_sources(RoomMultiEQ
         Source/SpectrumDataCollector.h
         Source/FilterResponseCalculator.cpp
         Source/FilterResponseCalculator.h
-        Source/SpectrumAnalyzer.cpp
-        Source/SpectrumAnalyzer.h
         Source/MultiChannelSpectrumAnalyzer.cpp
         Source/MultiChannelSpectrumAnalyzer.h
 )
@@ -152,7 +150,6 @@ if(ROOMMULTIEQ_BUILD_SCREENSHOT)
         Source/FilterFileParser.cpp
         Source/SpectrumDataCollector.cpp
         Source/FilterResponseCalculator.cpp
-        Source/SpectrumAnalyzer.cpp
         Source/MultiChannelSpectrumAnalyzer.cpp
     )
 
@@ -181,7 +178,6 @@ add_executable(RoomMultiEQ_SpectrumTest
     Source/FilterFileParser.cpp
     Source/SpectrumDataCollector.cpp
     Source/FilterResponseCalculator.cpp
-    Source/SpectrumAnalyzer.cpp
     Source/MultiChannelSpectrumAnalyzer.cpp
 )
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Room Multi EQ is a macOS AudioUnit plugin that applies independent parametric EQ to left and right channels, designed for loading Room EQ Wizard (REW) filter profiles. Built with JUCE framework.
+Room Multi EQ is a macOS AudioUnit plugin that applies independent parametric EQ to multiple channels (up to 24), designed for loading Room EQ Wizard (REW) filter profiles. Built with JUCE framework.
 
 ## Build Commands
 
@@ -40,7 +40,7 @@ The plugin is automatically copied to `~/Library/Audio/Plug-Ins/Components/` aft
 
 ### Core Classes
 
-- **RoomMultiEQAudioProcessor** (`PluginProcessor.h/cpp`) - Main audio processor using AudioProcessorValueTreeState for parameter management. Routes left/right channels to independent ChannelEQ instances.
+- **RoomMultiEQAudioProcessor** (`PluginProcessor.h/cpp`) - Main audio processor using AudioProcessorValueTreeState for parameter management. Routes each channel to its own ChannelEQ instance.
 
 - **ChannelEQ** (`ChannelEQ.h/cpp`) - Contains 16 EQBand instances for a single channel. Processes samples through the filter chain.
 
@@ -52,8 +52,8 @@ The plugin is automatically copied to `~/Library/Audio/Plug-Ins/Components/` aft
 
 ### Parameter Naming Convention
 
-Parameters follow the pattern: `{left|right}_band_{1-16}_{freq|gain|q|type|bypass}`
-Plus `master_bypass` for global bypass.
+Parameters follow the pattern: `ch{0-23}_band_{1-16}_{freq|gain|q|type|bypass}`
+Plus `ch{0-23}_bypass` for per-channel bypass.
 
 ### Filter Types
 
@@ -65,7 +65,7 @@ Maps to REW format: `PK` → Peak, `LS` → LowShelf, `HS` → HighShelf
 
 ## Key Specifications
 
-- 16 bands per channel (32 total)
+- 16 bands per channel (up to 24 channels)
 - Frequency: 20 Hz - 20,000 Hz
 - Gain: -20 dB to +20 dB
 - Q: 0.1 to 30

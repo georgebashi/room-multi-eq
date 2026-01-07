@@ -51,14 +51,9 @@ private:
     // Frame accumulation buffer for motion blur effect
     juce::Image accumulationBuffer;
 
-    // Dracula theme colors
-    static constexpr juce::uint32 colBackground = 0xff282a36;
-    static constexpr juce::uint32 colGridLine = 0xff44475a;
-    static constexpr juce::uint32 colText = 0xfff8f8f2;
-
-    // Display range
-    static constexpr float minFreq = 20.0f;
-    static constexpr float maxFreq = 20000.0f;
+    // Display range - use shared constants for frequency
+    static constexpr float minFreq = VisualizationConstants::minFreq;
+    static constexpr float maxFreq = VisualizationConstants::maxFreq;
     static constexpr float maxDB = 0.0f;
     static constexpr float minDB = -120.0f;
     static constexpr float silenceThresholdDB = -90.0f;  // Don't draw below this

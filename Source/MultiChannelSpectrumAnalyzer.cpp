@@ -216,7 +216,7 @@ void MultiChannelSpectrumAnalyzer::updateAccumulationBuffer(const juce::Image& c
 
 void MultiChannelSpectrumAnalyzer::drawBackground(juce::Graphics& g)
 {
-    g.fillAll(juce::Colour(colBackground));
+    g.fillAll(juce::Colour(VisualizationConstants::colBackground));
 }
 
 void MultiChannelSpectrumAnalyzer::drawDifferenceSpectrum(juce::Graphics& g, int channelIndex)

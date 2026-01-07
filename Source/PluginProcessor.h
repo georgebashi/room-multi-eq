@@ -65,12 +65,6 @@ public:
         return (now - lastProcessTime.load()) > 100.0; // 100ms timeout
     }
 
-    // Legacy accessors for backward compatibility
-    ChannelEQ& getLeftChannel() { return *channels[0]; }
-    ChannelEQ& getRightChannel() { return *channels[static_cast<size_t>(std::min(1, numChannels - 1))]; }
-    SpectrumDataCollector& getLeftSpectrumCollector() { return *spectrumCollectors[0]; }
-    SpectrumDataCollector& getRightSpectrumCollector() { return *spectrumCollectors[static_cast<size_t>(std::min(1, numChannels - 1))]; }
-
     void loadFilterFile(int channelIndex, const juce::File& file);
     void resetBandToDefaults(int channelIndex, int band);
     void clearChannel(int channelIndex);

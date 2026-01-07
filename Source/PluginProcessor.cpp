@@ -120,9 +120,6 @@ void RoomMultiEQAudioProcessor::initializeChannels(int count, const juce::AudioC
 
 void RoomMultiEQAudioProcessor::parameterChanged(const juce::String& parameterID, float)
 {
-    if (parameterID == "master_bypass")
-        return;
-
     // Parse channel index from "ch{N}_band_{M}_{param}" format
     if (!parameterID.startsWith("ch"))
         return;

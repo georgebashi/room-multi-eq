@@ -4,6 +4,16 @@
 #include <juce_graphics/juce_graphics.h>
 #include <array>
 
+// Shared visualization constants
+namespace VisualizationConstants
+{
+    static constexpr float minFreq = 20.0f;
+    static constexpr float maxFreq = 20000.0f;
+    static constexpr juce::uint32 colBackground = 0xff282a36;  // Dracula background
+    static constexpr juce::uint32 colGridLine = 0xff44475a;
+    static constexpr juce::uint32 colText = 0xfff8f8f2;
+}
+
 namespace ChannelColors
 {
     // Dracula theme colors for channels
@@ -17,11 +27,6 @@ namespace ChannelColors
         0xffff5555,  // 6: Red - Additional
         0xfff8f8f2   // 7: Foreground - Additional
     }};
-
-    // Background colors (for reference)
-    static constexpr juce::uint32 background = 0xff282a36;
-    static constexpr juce::uint32 currentLine = 0xff44475a;
-    static constexpr juce::uint32 comment = 0xff6272a4;
 
     inline juce::Colour getChannelColor(int channelIndex)
     {
