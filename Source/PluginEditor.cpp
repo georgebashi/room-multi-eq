@@ -164,7 +164,7 @@ private:
             float y = bounds.getY() + (1.0f - (db - minDB) / (maxDB - minDB)) * bounds.getHeight();
 
             // Bold line at 0 dB
-            if (db == 0.0f)
+            if (std::abs(db) < 0.1f)
                 g.setColour(juce::Colour(0xff5a5a5a));
             else
                 g.setColour(juce::Colour(0xff3a3a3a));
