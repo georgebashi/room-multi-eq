@@ -8,19 +8,21 @@ RoomMultiEQAudioProcessor::RoomMultiEQAudioProcessor()
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       apvts(*this, nullptr, "Parameters", createParameterLayout())
 {
-    // Add parameter listeners
+    // Pre-create channels for stereo default
+    initializeChannels(2, juce::AudioChannelSet::stereo());
+
+    // Add parameter listeners for all possible channels
     apvts.addParameterListener("master_bypass", this);
 
-    for (int ch = 0; ch < 2; ++ch)
+    for (int ch = 0; ch < MAX_CHANNELS; ++ch)
     {
-        juce::String channel = (ch == 0) ? "left" : "right";
         for (int b = 0; b < NUM_EQ_BANDS; ++b)
         {
-            apvts.addParameterListener(getParamID(channel, b, "freq"), this);
-            apvts.addParameterListener(getParamID(channel, b, "gain"), this);
-            apvts.addParameterListener(getParamID(channel, b, "q"), this);
-            apvts.addParameterListener(getParamID(channel, b, "type"), this);
-            apvts.addParameterListener(getParamID(channel, b, "bypass"), this);
+            apvts.addParameterListener(getParamID(ch, b, "freq"), this);
+            apvts.addParameterListener(getParamID(ch, b, "gain"), this);
+            apvts.addParameterListener(getParamID(ch, b, "q"), this);
+            apvts.addParameterListener(getParamID(ch, b, "type"), this);
+            apvts.addParameterListener(getParamID(ch, b, "bypass"), this);
         }
     }
 }
@@ -39,11 +41,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout RoomMultiEQAudioProcessor::c
         "Master Bypass",
         false));
 
-    // Per-channel, per-band parameters
-    for (int ch = 0; ch < 2; ++ch)
+    // Per-channel, per-band parameters (pre-allocate for MAX_CHANNELS)
+    for (int ch = 0; ch < MAX_CHANNELS; ++ch)
     {
-        juce::String channel = (ch == 0) ? "left" : "right";
-        juce::String channelName = (ch == 0) ? "Left" : "Right";
+        juce::String channelName = "Ch " + juce::String(ch + 1);
 
         for (int b = 0; b < NUM_EQ_BANDS; ++b)
         {
@@ -51,7 +52,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RoomMultiEQAudioProcessor::c
 
             // Frequency
             layout.add(std::make_unique<juce::AudioParameterFloat>(
-                juce::ParameterID(getParamID(channel, b, "freq"), 1),
+                juce::ParameterID(getParamID(ch, b, "freq"), 1),
                 channelName + " Band " + bandNum + " Freq",
                 juce::NormalisableRange<float>(20.0f, 20000.0f, 0.1f, 0.3f),
                 1000.0f,
@@ -60,7 +61,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RoomMultiEQAudioProcessor::c
 
             // Gain
             layout.add(std::make_unique<juce::AudioParameterFloat>(
-                juce::ParameterID(getParamID(channel, b, "gain"), 1),
+                juce::ParameterID(getParamID(ch, b, "gain"), 1),
                 channelName + " Band " + bandNum + " Gain",
                 juce::NormalisableRange<float>(-20.0f, 20.0f, 0.1f),
                 0.0f,
@@ -69,21 +70,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout RoomMultiEQAudioProcessor::c
 
             // Q
             layout.add(std::make_unique<juce::AudioParameterFloat>(
-                juce::ParameterID(getParamID(channel, b, "q"), 1),
+                juce::ParameterID(getParamID(ch, b, "q"), 1),
                 channelName + " Band " + bandNum + " Q",
                 juce::NormalisableRange<float>(0.1f, 30.0f, 0.01f, 0.5f),
                 1.0f));
 
             // Type
             layout.add(std::make_unique<juce::AudioParameterChoice>(
-                juce::ParameterID(getParamID(channel, b, "type"), 1),
+                juce::ParameterID(getParamID(ch, b, "type"), 1),
                 channelName + " Band " + bandNum + " Type",
                 juce::StringArray{"Peak", "Low Shelf", "High Shelf"},
                 0));
 
-            // Bypass
+            // Bypass (default true = bypassed)
             layout.add(std::make_unique<juce::AudioParameterBool>(
-                juce::ParameterID(getParamID(channel, b, "bypass"), 1),
+                juce::ParameterID(getParamID(ch, b, "bypass"), 1),
                 channelName + " Band " + bandNum + " Bypass",
                 true));
         }
@@ -92,15 +93,46 @@ juce::AudioProcessorValueTreeState::ParameterLayout RoomMultiEQAudioProcessor::c
     return layout;
 }
 
+void RoomMultiEQAudioProcessor::initializeChannels(int count, const juce::AudioChannelSet& channelSet)
+{
+    // Resize vectors if needed
+    while (static_cast<int>(channels.size()) < count)
+    {
+        channels.push_back(std::make_unique<ChannelEQ>());
+        spectrumCollectors.push_back(std::make_unique<SpectrumDataCollector>());
+    }
+
+    // Get channel names from JUCE
+    channelNames.clear();
+    for (int i = 0; i < count; ++i)
+    {
+        auto channelType = channelSet.getTypeOfChannel(i);
+        juce::String name = juce::AudioChannelSet::getAbbreviatedChannelTypeName(channelType);
+        if (name.isEmpty())
+            name = "Ch" + juce::String(i + 1);
+        channelNames.push_back(name);
+    }
+
+    numChannels = count;
+}
+
 void RoomMultiEQAudioProcessor::parameterChanged(const juce::String& parameterID, float)
 {
     if (parameterID == "master_bypass")
         return;
 
-    // Parse channel and band from parameter ID
-    bool isLeft = parameterID.startsWith("left_");
-    int bandIndex = -1;
+    // Parse channel index from "ch{N}_band_{M}_{param}" format
+    if (!parameterID.startsWith("ch"))
+        return;
 
+    int underscorePos = parameterID.indexOf("_");
+    if (underscorePos < 0)
+        return;
+
+    int channelIndex = parameterID.substring(2, underscorePos).getIntValue();
+
+    // Parse band index
+    int bandIndex = -1;
     for (int b = 0; b < NUM_EQ_BANDS; ++b)
     {
         if (parameterID.contains("_band_" + juce::String(b + 1) + "_"))
@@ -110,26 +142,28 @@ void RoomMultiEQAudioProcessor::parameterChanged(const juce::String& parameterID
         }
     }
 
-    if (bandIndex >= 0)
+    if (bandIndex >= 0 && channelIndex >= 0 && channelIndex < numChannels)
     {
-        updateBandFromParameters(isLeft ? 0 : 1, bandIndex);
+        updateBandFromParameters(channelIndex, bandIndex);
     }
 }
 
-void RoomMultiEQAudioProcessor::updateBandFromParameters(int channel, int band)
+void RoomMultiEQAudioProcessor::updateBandFromParameters(int channelIndex, int band)
 {
-    juce::String ch = (channel == 0) ? "left" : "right";
-    ChannelEQ& eq = (channel == 0) ? leftChannel : rightChannel;
+    if (channelIndex < 0 || channelIndex >= static_cast<int>(channels.size()))
+        return;
 
+    auto& eq = *channels[static_cast<size_t>(channelIndex)];
     auto& b = eq.getBand(band);
-    b.setFrequency(*apvts.getRawParameterValue(getParamID(ch, band, "freq")));
-    b.setGain(*apvts.getRawParameterValue(getParamID(ch, band, "gain")));
-    b.setQ(*apvts.getRawParameterValue(getParamID(ch, band, "q")));
 
-    int typeIndex = static_cast<int>(*apvts.getRawParameterValue(getParamID(ch, band, "type")));
+    b.setFrequency(*apvts.getRawParameterValue(getParamID(channelIndex, band, "freq")));
+    b.setGain(*apvts.getRawParameterValue(getParamID(channelIndex, band, "gain")));
+    b.setQ(*apvts.getRawParameterValue(getParamID(channelIndex, band, "q")));
+
+    int typeIndex = static_cast<int>(*apvts.getRawParameterValue(getParamID(channelIndex, band, "type")));
     b.setType(static_cast<FilterType>(typeIndex));
 
-    b.setBypassed(*apvts.getRawParameterValue(getParamID(ch, band, "bypass")) > 0.5f);
+    b.setBypassed(*apvts.getRawParameterValue(getParamID(channelIndex, band, "bypass")) > 0.5f);
 }
 
 const juce::String RoomMultiEQAudioProcessor::getName() const
@@ -182,36 +216,52 @@ void RoomMultiEQAudioProcessor::changeProgramName(int, const juce::String&)
 
 void RoomMultiEQAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
+    currentSampleRate = sampleRate;
+
+    // Initialize channels based on current bus layout
+    auto channelSet = getBusesLayout().getMainInputChannelSet();
+    int channelCount = channelSet.size();
+    initializeChannels(channelCount, channelSet);
+
     juce::dsp::ProcessSpec spec;
     spec.sampleRate = sampleRate;
     spec.maximumBlockSize = static_cast<juce::uint32>(samplesPerBlock);
     spec.numChannels = 1;
 
-    leftChannel.prepare(spec);
-    rightChannel.prepare(spec);
-
-    currentSampleRate = sampleRate;
-
-    // Initialize all bands from current parameter values
-    for (int b = 0; b < NUM_EQ_BANDS; ++b)
+    for (int ch = 0; ch < numChannels; ++ch)
     {
-        updateBandFromParameters(0, b);
-        updateBandFromParameters(1, b);
+        channels[static_cast<size_t>(ch)]->prepare(spec);
+
+        // Initialize all bands from current parameter values
+        for (int b = 0; b < NUM_EQ_BANDS; ++b)
+        {
+            updateBandFromParameters(ch, b);
+        }
     }
 }
 
 void RoomMultiEQAudioProcessor::releaseResources()
 {
-    leftChannel.reset();
-    rightChannel.reset();
+    for (auto& channel : channels)
+        channel->reset();
 }
 
 bool RoomMultiEQAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
 {
-    if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
+    // Accept any layout where:
+    // 1. Input and output channel sets match
+    // 2. Channel set is not disabled
+    // 3. Channel count is within our maximum
+    auto inputSet = layouts.getMainInputChannelSet();
+    auto outputSet = layouts.getMainOutputChannelSet();
+
+    if (inputSet.isDisabled() || outputSet.isDisabled())
         return false;
 
-    if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
+    if (inputSet != outputSet)
+        return false;
+
+    if (inputSet.size() > MAX_CHANNELS)
         return false;
 
     return true;
@@ -222,26 +272,22 @@ void RoomMultiEQAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 {
     juce::ScopedNoDenormals noDenormals;
 
-    // Read bypass directly from parameter for reliability
     if (*apvts.getRawParameterValue("master_bypass") > 0.5f)
         return;
 
-    auto* leftData = buffer.getWritePointer(0);
-    auto* rightData = buffer.getWritePointer(1);
+    int numSamples = buffer.getNumSamples();
+    int channelsToProcess = std::min(buffer.getNumChannels(), numChannels);
 
-    for (int i = 0; i < buffer.getNumSamples(); ++i)
+    for (int i = 0; i < numSamples; ++i)
     {
-        // Capture input
-        leftSpectrumCollector.pushInputSample(leftData[i]);
-        rightSpectrumCollector.pushInputSample(rightData[i]);
+        for (int ch = 0; ch < channelsToProcess; ++ch)
+        {
+            float* channelData = buffer.getWritePointer(ch);
 
-        // Process EQ
-        leftChannel.processSample(leftData[i]);
-        rightChannel.processSample(rightData[i]);
-
-        // Capture output
-        leftSpectrumCollector.pushOutputSample(leftData[i]);
-        rightSpectrumCollector.pushOutputSample(rightData[i]);
+            spectrumCollectors[static_cast<size_t>(ch)]->pushInputSample(channelData[i]);
+            channels[static_cast<size_t>(ch)]->processSample(channelData[i]);
+            spectrumCollectors[static_cast<size_t>(ch)]->pushOutputSample(channelData[i]);
+        }
     }
 }
 
@@ -271,35 +317,36 @@ void RoomMultiEQAudioProcessor::setStateInformation(const void* data, int sizeIn
         apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
 
         // Update all bands from restored state
-        for (int b = 0; b < NUM_EQ_BANDS; ++b)
+        for (int ch = 0; ch < numChannels; ++ch)
         {
-            updateBandFromParameters(0, b);
-            updateBandFromParameters(1, b);
+            for (int b = 0; b < NUM_EQ_BANDS; ++b)
+            {
+                updateBandFromParameters(ch, b);
+            }
         }
     }
 }
 
-void RoomMultiEQAudioProcessor::resetBandToDefaults(const juce::String& channel, int band)
+void RoomMultiEQAudioProcessor::resetBandToDefaults(int channelIndex, int band)
 {
-    if (auto* param = apvts.getParameter(getParamID(channel, band, "freq")))
+    if (auto* param = apvts.getParameter(getParamID(channelIndex, band, "freq")))
         param->setValueNotifyingHost(param->convertTo0to1(1000.0f));
-    if (auto* param = apvts.getParameter(getParamID(channel, band, "gain")))
+    if (auto* param = apvts.getParameter(getParamID(channelIndex, band, "gain")))
         param->setValueNotifyingHost(param->convertTo0to1(0.0f));
-    if (auto* param = apvts.getParameter(getParamID(channel, band, "q")))
+    if (auto* param = apvts.getParameter(getParamID(channelIndex, band, "q")))
         param->setValueNotifyingHost(param->convertTo0to1(1.0f));
-    if (auto* param = apvts.getParameter(getParamID(channel, band, "type")))
+    if (auto* param = apvts.getParameter(getParamID(channelIndex, band, "type")))
         param->setValueNotifyingHost(0.0f);
-    if (auto* param = apvts.getParameter(getParamID(channel, band, "bypass")))
+    if (auto* param = apvts.getParameter(getParamID(channelIndex, band, "bypass")))
         param->setValueNotifyingHost(1.0f);
 }
 
-void RoomMultiEQAudioProcessor::loadFilterFile(bool isLeftChannel, const juce::File& file)
+void RoomMultiEQAudioProcessor::loadFilterFile(int channelIndex, const juce::File& file)
 {
     auto filters = FilterFileParser::parseFile(file);
-    juce::String channel = isLeftChannel ? "left" : "right";
 
     for (int b = 0; b < NUM_EQ_BANDS; ++b)
-        resetBandToDefaults(channel, b);
+        resetBandToDefaults(channelIndex, b);
 
     // Apply parsed filters
     for (size_t i = 0; i < filters.size() && i < NUM_EQ_BANDS; ++i)
@@ -307,19 +354,19 @@ void RoomMultiEQAudioProcessor::loadFilterFile(bool isLeftChannel, const juce::F
         const auto& f = filters[i];
         int b = static_cast<int>(i);
 
-        if (auto* param = apvts.getParameter(getParamID(channel, b, "freq")))
+        if (auto* param = apvts.getParameter(getParamID(channelIndex, b, "freq")))
             param->setValueNotifyingHost(param->convertTo0to1(f.frequency));
 
-        if (auto* param = apvts.getParameter(getParamID(channel, b, "gain")))
+        if (auto* param = apvts.getParameter(getParamID(channelIndex, b, "gain")))
             param->setValueNotifyingHost(param->convertTo0to1(f.gainDB));
 
-        if (auto* param = apvts.getParameter(getParamID(channel, b, "q")))
+        if (auto* param = apvts.getParameter(getParamID(channelIndex, b, "q")))
             param->setValueNotifyingHost(param->convertTo0to1(f.q));
 
-        if (auto* param = apvts.getParameter(getParamID(channel, b, "type")))
+        if (auto* param = apvts.getParameter(getParamID(channelIndex, b, "type")))
             param->setValueNotifyingHost(static_cast<float>(f.type) / 2.0f);
 
-        if (auto* param = apvts.getParameter(getParamID(channel, b, "bypass")))
+        if (auto* param = apvts.getParameter(getParamID(channelIndex, b, "bypass")))
             param->setValueNotifyingHost(f.enabled ? 0.0f : 1.0f);
     }
 }

@@ -29,12 +29,14 @@ int main()
     processor.prepareToPlay(sampleRate, blockSize);
     std::cout << "2. Called prepareToPlay(sr=" << sampleRate << ", blockSize=" << blockSize << ")\n";
     std::cout << "   Processor reports sampleRate: " << processor.getCurrentSampleRate() << "\n";
+    std::cout << "   Processor reports numChannels: " << processor.getNumChannels() << "\n";
 
     // Set up some filter bands so we see a curve
+    // New API uses channel index instead of "left"/"right"
     auto& apvts = processor.getAPVTS();
-    auto setBand = [&apvts](const juce::String& channel, int band,
+    auto setBand = [&apvts](int channelIndex, int band,
                             float freq, float gain, float q) {
-        auto prefix = channel + "_band_" + juce::String(band) + "_";
+        auto prefix = "ch" + juce::String(channelIndex) + "_band_" + juce::String(band) + "_";
         if (auto* param = apvts.getParameter(prefix + "freq"))
             param->setValueNotifyingHost(param->convertTo0to1(freq));
         if (auto* param = apvts.getParameter(prefix + "gain"))
@@ -42,12 +44,13 @@ int main()
         if (auto* param = apvts.getParameter(prefix + "q"))
             param->setValueNotifyingHost(param->convertTo0to1(q));
         if (auto* param = apvts.getParameter(prefix + "bypass"))
-            param->setValueNotifyingHost(1.0f);  // 1.0 = not bypassed (filter active)
+            param->setValueNotifyingHost(0.0f);  // 0.0 = not bypassed (filter active)
     };
 
-    setBand("left", 1, 100.0f, 6.0f, 2.0f);
-    setBand("left", 2, 1000.0f, -6.0f, 2.0f);
-    setBand("right", 1, 500.0f, 3.0f, 1.5f);
+    // Channel 0 (L), Channel 1 (R)
+    setBand(0, 1, 100.0f, 6.0f, 2.0f);
+    setBand(0, 2, 1000.0f, -6.0f, 2.0f);
+    setBand(1, 1, 500.0f, 3.0f, 1.5f);
     std::cout << "3. Set filter bands\n";
 
     // Generate synthetic audio and process it
@@ -83,9 +86,9 @@ int main()
 
     std::cout << "   Processed " << (numBlocksToProcess * blockSize) << " samples\n";
 
-    // Verify data in collectors
-    auto& leftCollector = processor.getLeftSpectrumCollector();
-    auto spectrum = leftCollector.getInputSpectrum(sampleRate);
+    // Verify data in collectors (use new multi-channel API)
+    auto& collector = processor.getSpectrumCollector(0);  // Channel 0
+    auto spectrum = collector.getInputSpectrum(sampleRate);
 
     float maxDb = -200.0f;
     int maxBin = 0;
@@ -107,12 +110,11 @@ int main()
     std::cout << "   First 20 bins (dB): ";
     for (int i = 0; i < 20 && i < static_cast<int>(spectrum.size()); ++i)
     {
-        std::cout << spectrum[i] << " ";
+        std::cout << spectrum[static_cast<size_t>(i)] << " ";
     }
     std::cout << "\n";
 
-    // Create editor FIRST, before processing audio
-    // This ensures the timer-based smoothing sees the data
+    // Create editor
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
     if (!editor)
     {
@@ -121,21 +123,9 @@ int main()
     }
     std::cout << "6. Created editor\n";
 
-    // Force update the spectrum analyzers with current data
-    // (In normal operation, the timer handles this, but timers don't work in test context)
-    std::cout << "7. Force-updating spectrum analyzers...\n";
-
-    auto* roomEditor = dynamic_cast<RoomMultiEQAudioProcessorEditor*>(editor.get());
-    if (roomEditor)
-    {
-        roomEditor->getLeftChannel().getSpectrumAnalyzer()->forceUpdate();
-        roomEditor->getRightChannel().getSpectrumAnalyzer()->forceUpdate();
-        std::cout << "   Updated both spectrum analyzers\n";
-    }
-    else
-    {
-        std::cerr << "   Failed to cast editor\n";
-    }
+    // With new UI, the spectrum analyzer is updated via timer, which doesn't work in test context.
+    // Just take a snapshot - the filter curves should be visible even without spectrum data.
+    std::cout << "7. New UI uses unified multi-channel spectrum (timer-based updates).\n";
 
     // Capture screenshot
     auto image = editor->createComponentSnapshot(editor->getLocalBounds());

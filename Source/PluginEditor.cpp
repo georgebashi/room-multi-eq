@@ -119,42 +119,22 @@ private:
 // ChannelEQComponent
 //==============================================================================
 
-ChannelEQComponent::ChannelEQComponent(RoomMultiEQAudioProcessor& p, bool isLeft)
-    : processor(p), isLeftChannel(isLeft)
+ChannelEQComponent::ChannelEQComponent(RoomMultiEQAudioProcessor& p)
+    : processor(p), channelIndex(0)
 {
-    channelPrefix = isLeft ? "left" : "right";
-
-    // Create spectrum analyzer
-    spectrumAnalyzer = std::make_unique<SpectrumAnalyzer>(
-        isLeft ? p.getLeftSpectrumCollector() : p.getRightSpectrumCollector(),
-        isLeft ? p.getLeftChannel() : p.getRightChannel(),
-        p
-    );
-    addAndMakeVisible(*spectrumAnalyzer);
-    spectrumAnalyzer->startAnalysis();
-
-    importButton.setButtonText("Import");
-    importButton.onClick = [this]() { importFilterFile(); };
-    addAndMakeVisible(importButton);
-
-    clearButton.setButtonText("Clear All");
-    clearButton.onClick = [this]() { clearAll(); };
-    addAndMakeVisible(clearButton);
-
     table.setModel(this);
     table.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff2a2a2a));
     table.setRowHeight(24);
 
     auto& header = table.getHeader();
     header.addColumn("#", 1, 30, 30, 30);
-    header.addColumn("On", 2, 32, 32, 32);      // Just checkbox, no text
-    header.addColumn("Type", 3, 55, 55, 70);    // Wide enough for "LS" dropdown
+    header.addColumn("On", 2, 32, 32, 32);
+    header.addColumn("Type", 3, 55, 55, 70);
     header.addColumn("Freq", 4, 85, 75, 110);
     header.addColumn("Gain", 5, 70, 60, 90);
     header.addColumn("Q", 6, 55, 45, 75);
 
     addAndMakeVisible(table);
-
     updateVisibleBands();
 }
 
@@ -162,55 +142,20 @@ ChannelEQComponent::~ChannelEQComponent()
 {
 }
 
+void ChannelEQComponent::setChannelIndex(int index)
+{
+    channelIndex = index;
+    updateVisibleBands();
+}
+
 void ChannelEQComponent::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colour(0xff353535));
-
-    g.setColour(juce::Colours::white);
-    g.setFont(16.0f);
-    g.drawText(isLeftChannel ? "LEFT CHANNEL" : "RIGHT CHANNEL",
-               10, 5, getWidth() - 20, 25, juce::Justification::centred);
 }
 
 void ChannelEQComponent::resized()
 {
-    auto bounds = getLocalBounds().reduced(5);
-
-    // Title area
-    bounds.removeFromTop(30);
-    bounds.removeFromTop(5);
-
-    // Buttons at bottom
-    auto buttonArea = bounds.removeFromBottom(30);
-    importButton.setBounds(buttonArea.removeFromLeft(buttonArea.getWidth() / 2).reduced(2));
-    clearButton.setBounds(buttonArea.reduced(2));
-
-    bounds.removeFromBottom(5);
-
-    // Check if table should be visible
-    auto* editor = findParentComponentOfClass<RoomMultiEQAudioProcessorEditor>();
-    bool showTable = editor != nullptr && editor->areTablesVisible();
-
-    if (showTable)
-    {
-        // Split: 40% spectrum, 60% table
-        int spectrumHeight = static_cast<int>(bounds.getHeight() * 0.4f);
-        spectrumAnalyzer->setBounds(bounds.removeFromTop(spectrumHeight));
-        bounds.removeFromTop(5);
-        table.setBounds(bounds);
-        table.setVisible(true);
-    }
-    else
-    {
-        // Full spectrum
-        spectrumAnalyzer->setBounds(bounds);
-        table.setVisible(false);
-    }
-}
-
-void ChannelEQComponent::updateLayout()
-{
-    resized();
+    table.setBounds(getLocalBounds());
 }
 
 int ChannelEQComponent::getNumRows()
@@ -220,24 +165,19 @@ int ChannelEQComponent::getNumRows()
 
 bool ChannelEQComponent::isBandActive(int bandIndex) const
 {
-    // A band is "active" (should be shown) if any parameter differs from defaults.
-    // This means it was specified in an imported file.
-    // We don't hide based on bypass state - user can toggle filters on/off and they stay visible.
     auto& apvts = processor.getAPVTS();
 
     constexpr float freqDefault = 1000.0f;
     constexpr float gainDefault = 0.0f;
     constexpr float qDefault = 1.0f;
 
-    auto* freqParam = apvts.getParameter(RoomMultiEQAudioProcessor::getParamID(channelPrefix, bandIndex, "freq"));
-    auto* gainParam = apvts.getParameter(RoomMultiEQAudioProcessor::getParamID(channelPrefix, bandIndex, "gain"));
-    auto* qParam = apvts.getParameter(RoomMultiEQAudioProcessor::getParamID(channelPrefix, bandIndex, "q"));
+    auto* freqParam = apvts.getParameter(RoomMultiEQAudioProcessor::getParamID(channelIndex, bandIndex, "freq"));
+    auto* gainParam = apvts.getParameter(RoomMultiEQAudioProcessor::getParamID(channelIndex, bandIndex, "gain"));
+    auto* qParam = apvts.getParameter(RoomMultiEQAudioProcessor::getParamID(channelIndex, bandIndex, "q"));
 
     if (!freqParam || !gainParam || !qParam)
-        return true;  // Show if we can't check
+        return true;
 
-    // Note: These are approximations - the actual ranges use skew factors
-    // For freq and Q, just check if normalized value is near default normalized value
     float freqNormDefault = freqParam->convertTo0to1(freqDefault);
     float gainNormDefault = gainParam->convertTo0to1(gainDefault);
     float qNormDefault = qParam->convertTo0to1(qDefault);
@@ -246,14 +186,9 @@ bool ChannelEQComponent::isBandActive(int bandIndex) const
     float gainNorm = gainParam->getValue();
     float qNorm = qParam->getValue();
 
-    if (std::abs(freqNorm - freqNormDefault) > 0.001f)
-        return true;
-
-    if (std::abs(gainNorm - gainNormDefault) > 0.001f)
-        return true;
-
-    if (std::abs(qNorm - qNormDefault) > 0.001f)
-        return true;
+    if (std::abs(freqNorm - freqNormDefault) > 0.001f) return true;
+    if (std::abs(gainNorm - gainNormDefault) > 0.001f) return true;
+    if (std::abs(qNorm - qNormDefault) > 0.001f) return true;
 
     return false;
 }
@@ -298,8 +233,6 @@ void ChannelEQComponent::paintCell(juce::Graphics& g, int rowNumber, int columnI
 
 juce::Component* ChannelEQComponent::refreshComponentForCell(int rowNumber, int columnId, bool, juce::Component* existing)
 {
-    // Delete existing cell if any - we always create fresh cells to avoid
-    // stale parameter bindings when cells are reused
     delete existing;
 
     if (columnId == 1)
@@ -310,47 +243,19 @@ juce::Component* ChannelEQComponent::refreshComponentForCell(int rowNumber, int 
 
     switch (columnId)
     {
-        case 2: // Bypass
-            return new BypassButtonCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelPrefix, bandIndex, "bypass"));
-        case 3: // Type
-            return new TypeComboCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelPrefix, bandIndex, "type"));
-        case 4: // Freq
-            return new SliderCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelPrefix, bandIndex, "freq"), 70);
-        case 5: // Gain
-            return new SliderCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelPrefix, bandIndex, "gain"), 50);
-        case 6: // Q
-            return new SliderCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelPrefix, bandIndex, "q"), 40);
+        case 2:
+            return new BypassButtonCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelIndex, bandIndex, "bypass"));
+        case 3:
+            return new TypeComboCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelIndex, bandIndex, "type"));
+        case 4:
+            return new SliderCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelIndex, bandIndex, "freq"), 70);
+        case 5:
+            return new SliderCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelIndex, bandIndex, "gain"), 50);
+        case 6:
+            return new SliderCell(apvts, RoomMultiEQAudioProcessor::getParamID(channelIndex, bandIndex, "q"), 40);
         default:
             return nullptr;
     }
-}
-
-void ChannelEQComponent::importFilterFile()
-{
-    auto chooser = std::make_shared<juce::FileChooser>(
-        "Select Filter File",
-        juce::File::getSpecialLocation(juce::File::userHomeDirectory),
-        "*.txt");
-
-    auto chooserFlags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
-
-    chooser->launchAsync(chooserFlags, [this, chooser](const juce::FileChooser& fc)
-    {
-        auto file = fc.getResult();
-        if (file.existsAsFile())
-        {
-            processor.loadFilterFile(isLeftChannel, file);
-            updateVisibleBands();
-        }
-    });
-}
-
-void ChannelEQComponent::clearAll()
-{
-    for (int b = 0; b < NUM_EQ_BANDS; ++b)
-        processor.resetBandToDefaults(channelPrefix, b);
-
-    updateVisibleBands();
 }
 
 //==============================================================================
@@ -360,37 +265,130 @@ void ChannelEQComponent::clearAll()
 RoomMultiEQAudioProcessorEditor::RoomMultiEQAudioProcessorEditor(RoomMultiEQAudioProcessor& p)
     : AudioProcessorEditor(&p),
       audioProcessor(p),
-      leftChannelComponent(p, true),
-      rightChannelComponent(p, false)
+      channelTable(p)
 {
-    // Show Tables button
-    showTablesButton.setButtonText("Show Tables");
-    showTablesButton.onClick = [this]()
-    {
-        tablesVisible = !tablesVisible;
-        showTablesButton.setButtonText(tablesVisible ? "Hide Tables" : "Show Tables");
-        leftChannelComponent.updateLayout();
-        rightChannelComponent.updateLayout();
-    };
-    addAndMakeVisible(showTablesButton);
-
+    // Master bypass
     masterBypassButton.setButtonText("Master Bypass");
     masterBypassButton.setClickingTogglesState(true);
     addAndMakeVisible(masterBypassButton);
-
     bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         audioProcessor.getAPVTS(), "master_bypass", masterBypassButton);
 
-    addAndMakeVisible(leftChannelComponent);
-    addAndMakeVisible(rightChannelComponent);
+    // Multi-channel spectrum analyzer
+    spectrumAnalyzer = std::make_unique<MultiChannelSpectrumAnalyzer>(p);
+    addAndMakeVisible(*spectrumAnalyzer);
+    spectrumAnalyzer->startAnalysis();
 
-    setSize(700, 550);
+    // Channel selector
+    channelSelector.onChange = [this]() { onChannelSelected(); };
+    addAndMakeVisible(channelSelector);
+
+    // Import/Clear buttons
+    importButton.setButtonText("Import");
+    importButton.onClick = [this]() { importFilterFile(); };
+    addAndMakeVisible(importButton);
+
+    clearButton.setButtonText("Clear");
+    clearButton.onClick = [this]() { clearAll(); };
+    addAndMakeVisible(clearButton);
+
+    // Channel table
+    addAndMakeVisible(channelTable);
+
+    // Initialize
+    updateChannelSelector();
+    updateVisibilityToggles();
+
+    setSize(700, 600);
     setResizable(true, true);
-    setResizeLimits(600, 450, 1200, 900);
+    setResizeLimits(600, 500, 1200, 900);
 }
 
 RoomMultiEQAudioProcessorEditor::~RoomMultiEQAudioProcessorEditor()
 {
+}
+
+void RoomMultiEQAudioProcessorEditor::updateChannelSelector()
+{
+    channelSelector.clear();
+    const auto& names = audioProcessor.getChannelNames();
+    int numChannels = audioProcessor.getNumChannels();
+
+    for (int i = 0; i < numChannels; ++i)
+    {
+        channelSelector.addItem(names[static_cast<size_t>(i)], i + 1);
+    }
+
+    if (numChannels > 0)
+        channelSelector.setSelectedId(1);
+}
+
+void RoomMultiEQAudioProcessorEditor::onChannelSelected()
+{
+    int selectedId = channelSelector.getSelectedId();
+    if (selectedId > 0)
+    {
+        channelTable.setChannelIndex(selectedId - 1);
+    }
+}
+
+void RoomMultiEQAudioProcessorEditor::updateVisibilityToggles()
+{
+    // Clear existing toggles
+    for (auto& toggle : visibilityToggles)
+        removeChildComponent(toggle.get());
+    visibilityToggles.clear();
+
+    int numChannels = audioProcessor.getNumChannels();
+    const auto& names = audioProcessor.getChannelNames();
+
+    for (int i = 0; i < numChannels; ++i)
+    {
+        auto toggle = std::make_unique<juce::ToggleButton>(names[static_cast<size_t>(i)]);
+        toggle->setToggleState(true, juce::dontSendNotification);
+        toggle->setColour(juce::ToggleButton::textColourId, ChannelColors::getChannelColor(i));
+        toggle->setColour(juce::ToggleButton::tickColourId, ChannelColors::getChannelColor(i));
+
+        int channelIndex = i;
+        toggle->onClick = [this, channelIndex]()
+        {
+            bool visible = visibilityToggles[static_cast<size_t>(channelIndex)]->getToggleState();
+            spectrumAnalyzer->setChannelVisible(channelIndex, visible);
+        };
+
+        addAndMakeVisible(*toggle);
+        visibilityToggles.push_back(std::move(toggle));
+    }
+
+    resized();
+}
+
+void RoomMultiEQAudioProcessorEditor::importFilterFile()
+{
+    auto chooser = std::make_shared<juce::FileChooser>(
+        "Select Filter File",
+        juce::File::getSpecialLocation(juce::File::userHomeDirectory),
+        "*.txt");
+
+    chooser->launchAsync(
+        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        [this, chooser](const juce::FileChooser& fc)
+        {
+            auto file = fc.getResult();
+            if (file.existsAsFile())
+            {
+                audioProcessor.loadFilterFile(channelTable.getChannelIndex(), file);
+                channelTable.updateVisibleBands();
+            }
+        });
+}
+
+void RoomMultiEQAudioProcessorEditor::clearAll()
+{
+    int ch = channelTable.getChannelIndex();
+    for (int b = 0; b < NUM_EQ_BANDS; ++b)
+        audioProcessor.resetBandToDefaults(ch, b);
+    channelTable.updateVisibleBands();
 }
 
 void RoomMultiEQAudioProcessorEditor::paint(juce::Graphics& g)
@@ -406,19 +404,31 @@ void RoomMultiEQAudioProcessorEditor::resized()
 {
     auto bounds = getLocalBounds();
 
-    // Header area
+    // Header
     auto headerArea = bounds.removeFromTop(45);
-    headerArea.removeFromLeft(10);
+    headerArea.removeFromLeft(200); // Space for title
+    masterBypassButton.setBounds(headerArea.removeFromRight(130).reduced(5));
 
-    // Title on left (handled in paint())
+    // Spectrum analyzer (40% of remaining height)
+    int spectrumHeight = static_cast<int>(bounds.getHeight() * 0.4f);
+    spectrumAnalyzer->setBounds(bounds.removeFromTop(spectrumHeight));
 
-    // Buttons on right
-    auto buttonArea = headerArea.removeFromRight(240);
-    masterBypassButton.setBounds(buttonArea.removeFromRight(130).reduced(5));
-    showTablesButton.setBounds(buttonArea.removeFromRight(100).reduced(5));
+    // Visibility toggles row
+    auto toggleArea = bounds.removeFromTop(30);
+    toggleArea.removeFromLeft(10);
+    for (auto& toggle : visibilityToggles)
+    {
+        toggle->setBounds(toggleArea.removeFromLeft(50));
+    }
 
-    // Split remaining for channels
-    auto halfWidth = bounds.getWidth() / 2;
-    leftChannelComponent.setBounds(bounds.removeFromLeft(halfWidth));
-    rightChannelComponent.setBounds(bounds);
+    // Channel selector row
+    auto selectorArea = bounds.removeFromTop(35);
+    selectorArea.removeFromLeft(10);
+    channelSelector.setBounds(selectorArea.removeFromLeft(150).reduced(2));
+    importButton.setBounds(selectorArea.removeFromLeft(80).reduced(2));
+    clearButton.setBounds(selectorArea.removeFromLeft(80).reduced(2));
+
+    // Table
+    bounds.removeFromTop(5);
+    channelTable.setBounds(bounds.reduced(10, 0));
 }

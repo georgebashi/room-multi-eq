@@ -4,11 +4,15 @@
 #include <juce_dsp/juce_dsp.h>
 #include "ChannelEQ.h"
 #include "SpectrumDataCollector.h"
+#include <vector>
+#include <memory>
 
 class RoomMultiEQAudioProcessor : public juce::AudioProcessor,
                                   public juce::AudioProcessorValueTreeState::Listener
 {
 public:
+    static constexpr int MAX_CHANNELS = 24;
+
     RoomMultiEQAudioProcessor();
     ~RoomMultiEQAudioProcessor() override;
 
@@ -43,32 +47,41 @@ public:
 
     juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
 
-    ChannelEQ& getLeftChannel() { return leftChannel; }
-    ChannelEQ& getRightChannel() { return rightChannel; }
-
-    SpectrumDataCollector& getLeftSpectrumCollector() { return leftSpectrumCollector; }
-    SpectrumDataCollector& getRightSpectrumCollector() { return rightSpectrumCollector; }
+    // Multi-channel API
+    int getNumChannels() const { return numChannels; }
+    ChannelEQ& getChannel(int index) { return *channels[static_cast<size_t>(index)]; }
+    const ChannelEQ& getChannel(int index) const { return *channels[static_cast<size_t>(index)]; }
+    SpectrumDataCollector& getSpectrumCollector(int index) { return *spectrumCollectors[static_cast<size_t>(index)]; }
+    const juce::String& getChannelName(int index) const { return channelNames[static_cast<size_t>(index)]; }
+    const std::vector<juce::String>& getChannelNames() const { return channelNames; }
     double getCurrentSampleRate() const { return currentSampleRate; }
 
-    void loadFilterFile(bool leftChannel, const juce::File& file);
-    void resetBandToDefaults(const juce::String& channel, int band);
+    // Legacy accessors for backward compatibility
+    ChannelEQ& getLeftChannel() { return *channels[0]; }
+    ChannelEQ& getRightChannel() { return *channels[static_cast<size_t>(std::min(1, numChannels - 1))]; }
+    SpectrumDataCollector& getLeftSpectrumCollector() { return *spectrumCollectors[0]; }
+    SpectrumDataCollector& getRightSpectrumCollector() { return *spectrumCollectors[static_cast<size_t>(std::min(1, numChannels - 1))]; }
 
-    static juce::String getParamID(const juce::String& channel, int band, const juce::String& param)
+    void loadFilterFile(int channelIndex, const juce::File& file);
+    void resetBandToDefaults(int channelIndex, int band);
+
+    // Parameter ID generation - new format: ch{0-23}_band_{1-16}_{param}
+    static juce::String getParamID(int channelIndex, int band, const juce::String& param)
     {
-        return channel + "_band_" + juce::String(band + 1) + "_" + param;
+        return "ch" + juce::String(channelIndex) + "_band_" + juce::String(band + 1) + "_" + param;
     }
 
 private:
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
-    void updateBandFromParameters(int channel, int band);
+    void updateBandFromParameters(int channelIndex, int band);
+    void initializeChannels(int count, const juce::AudioChannelSet& channelSet);
 
     juce::AudioProcessorValueTreeState apvts;
 
-    ChannelEQ leftChannel;
-    ChannelEQ rightChannel;
-
-    SpectrumDataCollector leftSpectrumCollector;
-    SpectrumDataCollector rightSpectrumCollector;
+    std::vector<std::unique_ptr<ChannelEQ>> channels;
+    std::vector<std::unique_ptr<SpectrumDataCollector>> spectrumCollectors;
+    std::vector<juce::String> channelNames;
+    int numChannels = 0;
     double currentSampleRate = 44100.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RoomMultiEQAudioProcessor)

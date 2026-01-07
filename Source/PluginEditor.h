@@ -2,7 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
-#include "SpectrumAnalyzer.h"
+#include "MultiChannelSpectrumAnalyzer.h"
+#include "ChannelColors.h"
 
 class RoomMultiEQAudioProcessorEditor;  // Forward declaration
 
@@ -10,8 +11,11 @@ class ChannelEQComponent : public juce::Component,
                            public juce::TableListBoxModel
 {
 public:
-    ChannelEQComponent(RoomMultiEQAudioProcessor& processor, bool isLeft);
+    explicit ChannelEQComponent(RoomMultiEQAudioProcessor& processor);
     ~ChannelEQComponent() override;
+
+    void setChannelIndex(int index);
+    int getChannelIndex() const { return channelIndex; }
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -23,30 +27,16 @@ public:
     juce::Component* refreshComponentForCell(int rowNumber, int columnId, bool isRowSelected, juce::Component* existingComponentToUpdate) override;
 
     void updateVisibleBands();
-    void updateLayout();
-    SpectrumAnalyzer* getSpectrumAnalyzer() { return spectrumAnalyzer.get(); }
 
 private:
-    void importFilterFile();
-    void clearAll();
     bool isBandActive(int bandIndex) const;
     int getBandIndexForRow(int row) const;
 
     RoomMultiEQAudioProcessor& processor;
-    bool isLeftChannel;
-    juce::String channelPrefix;
+    int channelIndex = 0;
 
-    juce::TextButton importButton;
-    juce::TextButton clearButton;
     juce::TableListBox table;
-
     std::vector<int> visibleBands;  // Maps row index to band index
-
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sliderAttachments;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> comboAttachments;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> buttonAttachments;
-
-    std::unique_ptr<SpectrumAnalyzer> spectrumAnalyzer;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ChannelEQComponent)
 };
@@ -60,21 +50,30 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
 
-    bool areTablesVisible() const { return tablesVisible; }
-    ChannelEQComponent& getLeftChannel() { return leftChannelComponent; }
-    ChannelEQComponent& getRightChannel() { return rightChannelComponent; }
-
 private:
+    void updateChannelSelector();
+    void onChannelSelected();
+    void updateVisibilityToggles();
+    void importFilterFile();
+    void clearAll();
+
     RoomMultiEQAudioProcessor& audioProcessor;
 
     juce::ToggleButton masterBypassButton;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
 
-    ChannelEQComponent leftChannelComponent;
-    ChannelEQComponent rightChannelComponent;
+    std::unique_ptr<MultiChannelSpectrumAnalyzer> spectrumAnalyzer;
 
-    juce::TextButton showTablesButton;
-    bool tablesVisible = false;
+    // Visibility toggles
+    std::vector<std::unique_ptr<juce::ToggleButton>> visibilityToggles;
+
+    // Channel selector
+    juce::ComboBox channelSelector;
+    juce::TextButton importButton;
+    juce::TextButton clearButton;
+
+    // Single channel table
+    ChannelEQComponent channelTable;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RoomMultiEQAudioProcessorEditor)
 };

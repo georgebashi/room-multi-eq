@@ -59,6 +59,7 @@ target_sources(RoomMultiEQ
         Source/EQBand.h
         Source/ChannelEQ.cpp
         Source/ChannelEQ.h
+        Source/ChannelColors.h
         Source/FilterFileParser.cpp
         Source/FilterFileParser.h
         Source/SpectrumDataCollector.cpp
@@ -67,6 +68,8 @@ target_sources(RoomMultiEQ
         Source/FilterResponseCalculator.h
         Source/SpectrumAnalyzer.cpp
         Source/SpectrumAnalyzer.h
+        Source/MultiChannelSpectrumAnalyzer.cpp
+        Source/MultiChannelSpectrumAnalyzer.h
 )
 
 # Preprocessor definitions
@@ -150,6 +153,7 @@ if(ROOMMULTIEQ_BUILD_SCREENSHOT)
         Source/SpectrumDataCollector.cpp
         Source/FilterResponseCalculator.cpp
         Source/SpectrumAnalyzer.cpp
+        Source/MultiChannelSpectrumAnalyzer.cpp
     )
 
     target_link_libraries(RoomMultiEQ_Screenshot
@@ -178,6 +182,7 @@ add_executable(RoomMultiEQ_SpectrumTest
     Source/SpectrumDataCollector.cpp
     Source/FilterResponseCalculator.cpp
     Source/SpectrumAnalyzer.cpp
+    Source/MultiChannelSpectrumAnalyzer.cpp
 )
 
 target_link_libraries(RoomMultiEQ_SpectrumTest
